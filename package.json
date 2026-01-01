@@ -34,6 +34,6 @@
   "author": "Mapbox Solutions Architecture",
   "license": "ISC",
   "peerDependencies": {
-    "mapbox-gl": "^3.0.0"
+    "mapbox-gl": "^3.17.0"
   }
 }

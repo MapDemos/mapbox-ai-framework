@@ -9,25 +9,6 @@ import { errorLogger } from '../core/error-logger.js';
 
 export class ClaudeClient {
   constructor(options) {
-    // Support both object and legacy positional arguments for backward compatibility
-    if (typeof options === 'string') {
-      // Legacy: constructor(apiKey, rurubuMCP, mapController, i18n, config, app, onRurubuData)
-      const [apiKey, rurubuMCP, mapController, i18n, config, app, onRurubuData] = arguments;
-      options = {
-        apiKey,
-        dataSources: rurubuMCP ? [rurubuMCP] : [],
-        mapController,
-        i18n,
-        config,
-        app,
-        onDataCallback: onRurubuData ? (source, toolName, result) => {
-          if (toolName.includes('search') && toolName.includes('poi')) {
-            onRurubuData(result);
-          }
-        } : null
-      };
-    }
-
     // Extract options with defaults
     const {
       apiKey,
@@ -791,10 +772,7 @@ WORKFLOW SUMMARY:
       // }
 
       // Collect tools from available sources
-      const tools = [
-        ...this.rurubuMCP.getToolsForClaude(),
-        ...this.mapController.getToolsForClaude()
-      ];
+      const tools = this.getAllTools();
 
       if (this.config.DEBUG) {
       }
@@ -1901,11 +1879,7 @@ WORKFLOW SUMMARY:
 
     // Estimate tools array size (not included in request but adds overhead)
     // Tools are sent with every request and can be 20-40k tokens
-    const tools = [
-      ...this.rurubuMCP.getToolsForClaude(),
-      ...this.mapController.getToolsForClaude(),
-      ...(this.app ? this.app.getSearchHistoryTools() : [])
-    ];
+    const tools = this.getAllTools();
     const toolsTokens = this.estimateTokens(JSON.stringify(tools));
 
     const total = systemPromptTokens + conversationTokens + toolsTokens;
