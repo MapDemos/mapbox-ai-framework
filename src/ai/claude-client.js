@@ -18,7 +18,8 @@ export class ClaudeClient {
       config,
       app = null,
       systemPromptBuilder = null,  // Optional: custom system prompt function
-      onDataCallback = null        // Generic callback: (dataSource, toolName, result) => void
+      onDataCallback = null,       // Generic callback: (dataSource, toolName, result) => void
+      thinkingSimulator = null     // Optional: thinking message simulator
     } = options;
 
     this.apiKey = apiKey;
@@ -29,6 +30,7 @@ export class ClaudeClient {
     this.app = app;
     this.systemPromptBuilder = systemPromptBuilder;
     this.onDataCallback = onDataCallback;
+    this.thinkingSimulator = thinkingSimulator;
     this.conversationHistory = [];
 
     // Token caching - separate Map to avoid polluting message objects sent to API
@@ -314,6 +316,7 @@ GUIDELINES:
 
       return {
         text: `${this.i18n.t('status.error')}: ${error.message}`,
+        thinking: [],
         toolsUsed: [],
         isError: true
       };
@@ -517,6 +520,7 @@ GUIDELINES:
         // For other errors, return partial response
         return {
           text: accumulatedText || 'I used some tools but encountered an error.',
+          thinking: [],
           toolsUsed: toolResults.map(r => r.tool_use_id)
         };
       }
@@ -525,6 +529,7 @@ GUIDELINES:
     // No tool calls, return text response
     return {
       text: accumulatedText,
+      thinking: [],
       toolsUsed: []
     };
   }
@@ -636,6 +641,7 @@ GUIDELINES:
         return {
           text: assistantMessage.content.find(c => c.type === 'text')?.text ||
             'I used some tools but encountered an error processing the results.',
+          thinking: [],
           toolsUsed: toolResults.map(r => r.tool_use_id)
         };
       }
@@ -644,6 +650,7 @@ GUIDELINES:
     // No tool calls, return text response
     return {
       text: assistantMessage.content.find(c => c.type === 'text')?.text || '',
+      thinking: [],
       toolsUsed: []
     };
   }
@@ -928,7 +935,7 @@ GUIDELINES:
       }
 
       // Check Search History Tools
-      if (this.app) {
+      if (this.app && typeof this.app.getSearchHistoryTools === 'function') {
         const searchHistoryTools = this.app.getSearchHistoryTools();
         const searchHistoryTool = searchHistoryTools.find(t => t.name === toolName);
         if (searchHistoryTool) {

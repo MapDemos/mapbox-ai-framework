@@ -44,3 +44,6 @@ export {
   getIsochrone,
   extractJapaneseNames
 } from './map/index.js';
+
+// App layer (BaseApp template)
+export { BaseApp, asyncErrorWrapper } from './app/index.js';

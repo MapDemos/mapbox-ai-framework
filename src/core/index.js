@@ -13,3 +13,8 @@ export {
 } from './utils.js';
 export { ThinkingSimulator, DefaultMessageProvider } from './thinking-simulator.js';
 export { I18n } from './i18n.js';
+export {
+  getUserLocation,
+  isLocationInBounds,
+  calculateDistance
+} from './geolocation.js';

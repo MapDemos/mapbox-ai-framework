@@ -99,6 +99,12 @@ export function extractJapaneseNames(feature) {
  * @returns {object|null} - Mapbox geocoding feature or null if not found
  */
 export async function reverseGeocode(longitude, latitude, accessToken, options = {}) {
+  // Validate coordinates
+  if (longitude === undefined || latitude === undefined || longitude === null || latitude === null) {
+    console.warn('[Mapbox Reverse Geocoding v6] Invalid coordinates:', { longitude, latitude });
+    return null;
+  }
+
   try {
     const params = new URLSearchParams({
       longitude: longitude.toString(),

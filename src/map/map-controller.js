@@ -2285,6 +2285,54 @@ export class MapController {
   }
 
   /**
+   * Recenter map to user location or default center
+   * @param {Object} userLocation - User location object {latitude, longitude}
+   */
+  recenterToUser(userLocation) {
+    if (!this.map) return;
+
+    if (userLocation) {
+      this.map.flyTo({
+        center: [userLocation.longitude, userLocation.latitude],
+        zoom: 12,
+        duration: 2000
+      });
+    } else {
+      this.map.flyTo({
+        center: this.config.DEFAULT_MAP_CENTER,
+        zoom: this.config.DEFAULT_MAP_ZOOM,
+        duration: 2000
+      });
+    }
+  }
+
+  /**
+   * Get current map view context for AI
+   * @returns {Object} Map context with center, zoom, and bounds
+   */
+  getMapContext() {
+    if (!this.map) return null;
+
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    const bounds = this.map.getBounds();
+
+    return {
+      center: {
+        longitude: center.lng,
+        latitude: center.lat
+      },
+      zoom: zoom,
+      bounds: {
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest()
+      }
+    };
+  }
+
+  /**
    * Fit map to bounds
    * @param {array} bounds - [[west, south], [east, north]]
    */
