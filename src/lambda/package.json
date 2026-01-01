@@ -1,0 +1,8 @@
+{
+  "name": "japan-ai-proxy",
+  "version": "1.0.0",
+  "description": "AWS Lambda proxy for AI APIs (Claude & Gemini)",
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {}
+}
