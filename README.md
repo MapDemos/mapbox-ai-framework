@@ -7,24 +7,60 @@ Build AI-powered map applications in minutes. Combines Mapbox GL JS with Claude/
 - 🤖 **AI Integration**: Pre-built Claude and Gemini clients with streaming support
 - 🗺️ **Map Tools**: Mapbox GL JS utilities (geocoding, directions, isochrones)
 - 🔌 **MCP Pattern**: Model Context Protocol for connecting AI to data sources
-- 🛠️ **Base Classes**: Extend `DataSourceBase` and `AppBase` for your domain
+- 🛠️ **Base Classes**: Extend `DataSourceBase` for your domain
 - 🌐 **Lambda Proxy**: Secure AI API proxy with rate limiting and CORS
 - 🔒 **Production Ready**: Error handling, token management, rate limiting
 - 📦 **Zero Config**: Sensible defaults, easy customization
 
-## Quick Start
+## Installation
 
-### 1. Install
+This package is published to **GitHub Packages** (private registry).
+
+### 1. Configure npm for GitHub Packages
+
+Create or update `.npmrc` in your project root:
 
 ```bash
-npm install mapbox-ai-framework mapbox-gl
+echo "@mapdemos:registry=https://npm.pkg.github.com" > .npmrc
+```
+
+### 2. Authenticate (One-time setup)
+
+```bash
+# Login to GitHub Packages
+npm login --scope=@mapdemos --registry=https://npm.pkg.github.com
+
+# Credentials:
+# Username: your-github-username
+# Password: <your-github-personal-access-token>
+# Email: your-email
+```
+
+**GitHub Personal Access Token:**
+- Go to: https://github.com/settings/tokens/new
+- Scopes needed: `read:packages`, `write:packages` (if publishing)
+- Save token securely
+
+### 3. Install the Package
+
+```bash
+npm install @mapdemos/ai-framework mapbox-gl
+```
+
+## Quick Start
+
+### 1. Setup Your Project
+
+Your `.npmrc` should contain:
+```
+@mapdemos:registry=https://npm.pkg.github.com
 ```
 
 ### 2. Create Your Data Source
 
 ```javascript
 // modules/my-data-mcp.js
-import { DataSourceBase } from 'mapbox-ai-framework/data';
+import { DataSourceBase } from '@mapdemos/ai-framework/data';
 
 export class MyDataMCP extends DataSourceBase {
   async initialize() {
@@ -79,7 +115,7 @@ export class MyDataMCP extends DataSourceBase {
 
 ```javascript
 // index.js
-import { AppBase } from 'mapbox-ai-framework';
+import { AppBase } from '@mapdemos/ai-framework';
 import { MyDataMCP } from './modules/my-data-mcp.js';
 import { CONFIG } from './config.js';
 
@@ -389,7 +425,7 @@ class MyApp extends AppBase {
 ### Custom Thinking Messages
 
 ```javascript
-import { ThinkingSimulator } from 'mapbox-ai-framework/core';
+import { ThinkingSimulator } from '@mapdemos/ai-framework/core';
 
 class MyThinkingMessages {
   generateMessages({ question, location, category }) {
@@ -407,7 +443,7 @@ const simulator = new ThinkingSimulator(i18n, new MyThinkingMessages());
 ### Multi-Language Support
 
 ```javascript
-import { I18n } from 'mapbox-ai-framework/core';
+import { I18n } from '@mapdemos/ai-framework/core';
 
 const translations = {
   en: {
