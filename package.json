@@ -1,6 +1,6 @@
 {
   "name": "@mapdemos/ai-framework",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reusable framework for building AI-powered geospatial demos with Mapbox and Claude",
   "main": "src/index.js",
   "type": "module",
