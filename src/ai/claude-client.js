@@ -1,8 +1,8 @@
 /**
  * Claude Client
- * Handles communication with Claude API and coordinates dual MCP architecture
- * - Rurubu MCP (client-side virtual server)
- * - Map Tools MCP (visualization library)
+ * Handles communication with Claude API and coordinates MCP architecture
+ * - Data Source MCPs (domain-specific data providers)
+ * - Map Tools (visualization library)
  */
 
 import { errorLogger } from '../core/error-logger.js';
@@ -120,25 +120,6 @@ GUIDELINES:
 - Search for relevant information using the tools available
 - Present only data-backed information
 - Offer to adjust or provide more options based on user feedback`;
-  }
-
-  /**
-   * Build Japan-specific system prompt (MOVED TO DEMO)
-   *
-   * This method has been moved from the framework to the demo project at:
-   * /demos/japan-tourism/prompts/japan-system-prompt.js
-   *
-   * The demo now provides its own buildJapanTravelPrompt() function via systemPromptBuilder.
-   * This method is deprecated and kept only for backwards compatibility.
-   *
-   * New projects should create their own system prompt builder and pass it via
-   * the systemPromptBuilder option instead of calling this method.
-   */
-  buildJapanTravelPrompt(userLocation = null, mapView = null) {
-    throw new Error(
-      'buildJapanTravelPrompt has been moved from the framework to the demo project. ' +
-      'See: /demos/japan-tourism/prompts/japan-system-prompt.js'
-    );
   }
 
   /**
@@ -774,8 +755,8 @@ GUIDELINES:
    * Used for follow-up requests to reduce token usage while keeping POI data available
    */
   compressToolResult(toolName, result) {
-    // For Rurubu POI searches, compress the GeoJSON but keep it (unlike truncate which removes it)
-    if (toolName === 'search_rurubu_pois' && result.content && result.content[0]) {
+    // Compress GeoJSON data in tool results
+    if (result.content && result.content[0]) {
       try {
         const data = JSON.parse(result.content[0].text);
         if (data.geojson && data.geojson.features) {
@@ -883,19 +864,19 @@ GUIDELINES:
    * Keeps essential info while removing verbose data
    */
   truncateToolResult(toolName, result) {
-    // For Rurubu POI searches, truncate the GeoJSON to just a summary
-    if (toolName === 'search_rurubu_pois' && result.content && result.content[0]) {
+    // Truncate GeoJSON data to minimal summary
+    if (result.content && result.content[0]) {
       try {
         const data = JSON.parse(result.content[0].text);
         if (data.geojson && data.geojson.features) {
-          // Keep minimal summary - POI details available via get_visible_pois tool
+          // Keep minimal summary - POI details available via map tools
           const truncated = {
             sid: data.search_id || 'unknown', // Abbreviate keys
             cat: data.category,
             loc: data.location,
             jis: data.jis_code,
             cnt: data.count,
-            msg: `${data.count} ${data.category} POIs in ${data.location}. Use get_poi_summary for details.`
+            msg: `${data.count} ${data.category || 'POIs'} in ${data.location || 'area'}. Use get_poi_summary for details.`
           };
           return {
             content: [{

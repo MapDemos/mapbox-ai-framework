@@ -446,7 +446,7 @@ export class MapController {
                   properties: {
                     id: {
                       type: 'string',
-                      description: 'POI ID (preferred for accurate matching, especially for Rurubu POIs)'
+                      description: 'POI ID (preferred for accurate matching)'
                     },
                     name: {
                       type: 'string',
@@ -1519,7 +1519,7 @@ export class MapController {
       if (notFoundPOIs.length > 0) {
         result.warning = `${notFoundPOIs.length} POI(s) not found in database and were skipped`;
         result.not_found_pois = notFoundPOIs.map(p => `#${p.index}: ${p.name} (id: ${p.id || 'none'})`);
-        result.message += `. WARNING: ${notFoundPOIs.length} POI(s) not in database - use ONLY POIs from search_rurubu_pois results!`;
+        result.message += `. WARNING: ${notFoundPOIs.length} POI(s) not in database - use ONLY POIs from search results!`;
       }
 
       return {
@@ -2055,13 +2055,13 @@ export class MapController {
 
         // Store in search history (if app reference is available)
         let searchId = null;
-        if (this.app && this.app.storeRurubuData) {
+        if (this.app && this.app.storeSearchData) {
           const metadata = {
             category: category,
             location: query,  // Use the search query as location
             source: 'searchbox'  // Mark as SearchBox data
           };
-          searchId = await this.app.storeRurubuData(geojson, metadata);
+          searchId = await this.app.storeSearchData(geojson, metadata);
 
           // DO NOT auto-display - let Claude review and decide
           // Claude will call get_poi_summary to review, then show_search_results or highlight_recommended_pois
