@@ -1,0 +1,39 @@
+{
+  "name": "@mapdemos/ai-framework",
+  "version": "0.1.0",
+  "description": "Reusable framework for building AI-powered geospatial demos with Mapbox and Claude",
+  "main": "src/index.js",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core/index.js",
+    "./data": "./src/data/index.js",
+    "./ai": "./src/ai/index.js",
+    "./map": "./src/map/index.js"
+  },
+  "files": [
+    "src/"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MapDemos/mapbox-ai-framework.git"
+  },
+  "keywords": [
+    "mapbox",
+    "ai",
+    "mcp",
+    "claude",
+    "gemini",
+    "framework",
+    "geospatial",
+    "mapping"
+  ],
+  "author": "Mapbox Solutions Architecture",
+  "license": "ISC",
+  "peerDependencies": {
+    "mapbox-gl": "^3.0.0"
+  }
+}

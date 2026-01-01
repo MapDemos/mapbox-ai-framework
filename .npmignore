@@ -1,0 +1,10 @@
+# Don't publish these to npm
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+.DS_Store
+
+# Only publish src/
+# Everything else is excluded by default with "files": ["src/"] in package.json
