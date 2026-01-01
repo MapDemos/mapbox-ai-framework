@@ -8,14 +8,46 @@
 import { errorLogger } from '../core/error-logger.js';
 
 export class ClaudeClient {
-  constructor(apiKey, rurubuMCP, mapController, i18n, config, app = null, onRurubuData = null) {
+  constructor(options) {
+    // Support both object and legacy positional arguments for backward compatibility
+    if (typeof options === 'string') {
+      // Legacy: constructor(apiKey, rurubuMCP, mapController, i18n, config, app, onRurubuData)
+      const [apiKey, rurubuMCP, mapController, i18n, config, app, onRurubuData] = arguments;
+      options = {
+        apiKey,
+        dataSources: rurubuMCP ? [rurubuMCP] : [],
+        mapController,
+        i18n,
+        config,
+        app,
+        onDataCallback: onRurubuData ? (source, toolName, result) => {
+          if (toolName.includes('search') && toolName.includes('poi')) {
+            onRurubuData(result);
+          }
+        } : null
+      };
+    }
+
+    // Extract options with defaults
+    const {
+      apiKey,
+      dataSources = [],           // Array of DataSourceBase instances
+      mapController,
+      i18n,
+      config,
+      app = null,
+      systemPromptBuilder = null,  // Optional: custom system prompt function
+      onDataCallback = null        // Generic callback: (dataSource, toolName, result) => void
+    } = options;
+
     this.apiKey = apiKey;
-    this.rurubuMCP = rurubuMCP;
+    this.dataSources = Array.isArray(dataSources) ? dataSources : [dataSources].filter(Boolean);
     this.mapController = mapController;
     this.i18n = i18n;
     this.config = config;
-    this.app = app; // Reference to main app for search history management
-    this.onRurubuData = onRurubuData; // Callback to store full Rurubu POI data
+    this.app = app;
+    this.systemPromptBuilder = systemPromptBuilder;
+    this.onDataCallback = onDataCallback;
     this.conversationHistory = [];
 
     // Token caching - separate Map to avoid polluting message objects sent to API
@@ -40,11 +72,31 @@ export class ClaudeClient {
    * Build the system prompt for Claude
    */
   buildSystemPrompt(userLocation = null, mapView = null) {
+    // If custom system prompt builder provided, use it
+    if (this.systemPromptBuilder) {
+      return this.systemPromptBuilder({
+        userLocation: userLocation || this.userLocation,
+        mapView: mapView || this.mapView,
+        i18n: this.i18n,
+        dataSources: this.dataSources,
+        config: this.config
+      });
+    }
+
+    // Otherwise, use default generic prompt
+    return this.buildDefaultSystemPrompt(userLocation, mapView);
+  }
+
+  /**
+   * Build default system prompt (generic, domain-agnostic)
+   * This is used when no custom systemPromptBuilder is provided
+   */
+  buildDefaultSystemPrompt(userLocation = null, mapView = null) {
     // Get current language
     const currentLang = this.i18n.getCurrentLanguage();
     const langName = currentLang === 'ja' ? 'Japanese' : 'English';
 
-    // Build location context (keep existing logic)
+    // Build location context
     let locationContext = '';
     if (userLocation) {
       const coords = `${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`;
@@ -56,10 +108,65 @@ export class ClaudeClient {
       }
     }
 
-    // Build map view context (keep existing logic)
+    // Build map view context
     let mapViewContext = '';
     if (mapView) {
-      const { center, zoom, bounds, placeName, name } = mapView;
+      const { center, zoom, placeName, name } = mapView;
+      const coords = `${center.lat.toFixed(4)}°N, ${center.lng.toFixed(4)}°E`;
+      if (placeName || name) {
+        const location = placeName || name;
+        mapViewContext = `Map view: ${location} (${coords}, zoom ${zoom.toFixed(1)})\n\n`;
+      } else {
+        mapViewContext = `Map view: ${coords} (zoom ${zoom.toFixed(1)})\n\n`;
+      }
+    }
+
+    return `${mapViewContext}You are an AI assistant helping users explore locations and find places of interest.
+
+YOUR APPROACH:
+- Ask clarifying questions when needed
+- Use available tools to search for relevant information
+- Present findings clearly and accurately
+- Respond in ${langName}${locationContext}
+
+TOOLS AVAILABLE:
+- Use search tools to find places and information
+- Use map tools to visualize locations and routes
+- Always verify data before presenting it to users
+
+GUIDELINES:
+- Ask for clarification if the user's request is vague
+- Search for relevant information using the tools available
+- Present only data-backed information
+- Offer to adjust or provide more options based on user feedback`;
+  }
+
+  /**
+   * Build Japan-specific system prompt (deprecated - kept for reference)
+   * This was the original domain-specific prompt. New projects should create their own
+   * system prompt builder and pass it via the systemPromptBuilder option.
+   */
+  buildJapanTravelPrompt(userLocation = null, mapView = null) {
+    // Get current language
+    const currentLang = this.i18n.getCurrentLanguage();
+    const langName = currentLang === 'ja' ? 'Japanese' : 'English';
+
+    // Build location context
+    let locationContext = '';
+    if (userLocation) {
+      const coords = `${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`;
+      const placeName = userLocation.placeName || userLocation.name;
+      if (placeName) {
+        locationContext = `\n\nUSER LOCATION:\n- Current location: ${placeName}\n- Coordinates: ${coords}\n- When user asks "around me", "near me", "nearby", use this location as reference`;
+      } else {
+        locationContext = `\n\nUSER LOCATION:\n- Current location: ${coords}\n- When user asks "around me", "near me", "nearby", use this location as reference`;
+      }
+    }
+
+    // Build map view context
+    let mapViewContext = '';
+    if (mapView) {
+      const { center, zoom, placeName, name } = mapView;
       const coords = `${center.lat.toFixed(4)}°N, ${center.lng.toFixed(4)}°E`;
       if (placeName || name) {
         const location = placeName || name;
@@ -605,6 +712,32 @@ WORKFLOW SUMMARY:
   }
 
   /**
+   * Get all available tools from all sources
+   */
+  getAllTools() {
+    const tools = [];
+
+    // Collect from all data sources
+    this.dataSources.forEach(dataSource => {
+      if (dataSource && typeof dataSource.getToolsForClaude === 'function') {
+        tools.push(...dataSource.getToolsForClaude());
+      }
+    });
+
+    // Add map tools
+    if (this.mapController && typeof this.mapController.getToolsForClaude === 'function') {
+      tools.push(...this.mapController.getToolsForClaude());
+    }
+
+    // Add app tools (search history)
+    if (this.app && typeof this.app.getSearchHistoryTools === 'function') {
+      tools.push(...this.app.getSearchHistoryTools());
+    }
+
+    return tools;
+  }
+
+  /**
    * Update user location and rebuild system prompt
    */
   updateUserLocation(userLocation) {
@@ -893,7 +1026,7 @@ WORKFLOW SUMMARY:
     // If we have tool calls, execute them
     if (toolUses.length > 0) {
       if (onProgress) {
-        onProgress(this.i18n.t('status.callingRurubu'));
+        onProgress(this.i18n.t('status.callingTools'));
       }
 
       // Collect all tool calls first
@@ -1021,7 +1154,7 @@ WORKFLOW SUMMARY:
 
     if (hasToolUse && toolUseBlocks.length > 0) {
       if (onProgress) {
-        onProgress(this.i18n.t('status.callingRurubu'));
+        onProgress(this.i18n.t('status.callingTools'));
       }
 
       // Execute all tools in parallel
@@ -1112,11 +1245,8 @@ WORKFLOW SUMMARY:
    * @param {Array} overrideToolResults - Optional: Use these tool results instead of last message in history (for same-turn full data)
    */
   async sendFollowUpRequest(overrideToolResults = null) {
-    const tools = [
-      ...this.rurubuMCP.getToolsForClaude(),
-      ...this.mapController.getToolsForClaude(),
-      ...(this.app ? this.app.getSearchHistoryTools() : [])
-    ];
+    // Collect tools from all sources
+    const tools = this.getAllTools();
 
     // Check token usage and prune if necessary before follow-up
     // DISABLED: Auto-pruning disabled - will wait for Claude API to return 400 error instead
@@ -1356,43 +1486,37 @@ WORKFLOW SUMMARY:
   }
 
   /**
-   * Execute a tool from any of the three MCP sources
+   * Execute a tool from any data source or service
    */
   async executeTool(toolName, args) {
     try {
-      // Check Rurubu MCP tools
-      const rurubuTool = this.rurubuMCP.getToolDefinition(toolName);
-      if (rurubuTool) {
-        const result = await this.rurubuMCP.executeTool(toolName, args);
+      // Check all data sources
+      for (const dataSource of this.dataSources) {
+        if (!dataSource) continue;
 
-        // If this is a search_rurubu_pois call, extract and store the full GeoJSON data
-        if (toolName === 'search_rurubu_pois' && this.onRurubuData && result.content) {
-          try {
-            const resultText = result.content[0].text;
-            const resultData = JSON.parse(resultText);
-            if (resultData.geojson && resultData.geojson.features) {
-              // Store full POI data with metadata for search history
-              const metadata = {
-                category: resultData.category,
-                location: resultData.location,
-                jis_code: resultData.jis_code,
-                pages: resultData.pages
-              };
-              this.onRurubuData(resultData.geojson, metadata);
-            }
-          } catch (e) {
-            // Failed to extract Rurubu GeoJSON
+        // Check if this data source has this tool
+        const hasToolMethod = typeof dataSource.getToolDefinition === 'function';
+        const tool = hasToolMethod ? dataSource.getToolDefinition(toolName) : null;
+
+        if (tool) {
+          const result = await dataSource.executeTool(toolName, args);
+
+          // Generic callback for any data source
+          if (this.onDataCallback) {
+            this.onDataCallback(dataSource, toolName, result, args);
           }
-        }
 
-        return result;
+          return result;
+        }
       }
 
       // Check Map Tools
-      const mapTools = this.mapController.getToolsForClaude();
-      const mapTool = mapTools.find(t => t.name === toolName);
-      if (mapTool) {
-        return await this.mapController.executeTool(toolName, args);
+      if (this.mapController) {
+        const mapTools = this.mapController.getToolsForClaude();
+        const mapTool = mapTools.find(t => t.name === toolName);
+        if (mapTool) {
+          return await this.mapController.executeTool(toolName, args);
+        }
       }
 
       // Check Search History Tools
