@@ -43,6 +43,10 @@ export class TextToSpeechManager {
     this.summaryCache = new Map();
     this.maxCacheSize = 50; // Cache up to 50 summaries
 
+    // Audio cache (to avoid re-generating audio for same text)
+    this.audioCache = new Map();
+    this.maxAudioCacheSize = 20; // Cache up to 20 audio files
+
     // Callbacks
     this.onPreparingCallback = null; // Called when starting to prepare summary
     this.onStartCallback = null;     // Called when audio actually starts playing
@@ -117,6 +121,13 @@ export class TextToSpeechManager {
     // Stop any current speech
     this.stop();
 
+    // Check if we have cached audio for this text (Google Cloud TTS only)
+    if (this.useGoogleCloudTTS && this.audioCache.has(text)) {
+      const cachedAudioUrl = this.audioCache.get(text);
+      await this.playCachedAudio(cachedAudioUrl);
+      return;
+    }
+
     // Get AI summary for speech (if enabled)
     let speechText = text;
     if (this.config.TTS_USE_AI_SUMMARY) {
@@ -151,7 +162,7 @@ export class TextToSpeechManager {
 
     // Route to appropriate TTS method
     if (this.useGoogleCloudTTS) {
-      await this.speakWithGoogleCloud(speechText, options);
+      await this.speakWithGoogleCloud(speechText, options, text);
     } else {
       this.speakWithWebSpeech(speechText, options);
     }
@@ -212,8 +223,11 @@ export class TextToSpeechManager {
 
   /**
    * Speak using Google Cloud Text-to-Speech API
+   * @param {string} text - Summarized text to speak
+   * @param {Object} options - Voice options
+   * @param {string} originalText - Original text (for caching audio)
    */
-  async speakWithGoogleCloud(text, options = {}) {
+  async speakWithGoogleCloud(text, options = {}, originalText = null) {
     try {
       const currentLang = this.i18n.getCurrentLanguage();
       const languageCode = currentLang === 'ja' ? 'ja-JP' : 'en-US';
@@ -264,8 +278,13 @@ export class TextToSpeechManager {
         throw new Error('No audio content received from Google Cloud TTS');
       }
 
-      // Play the audio
-      await this.playAudioFromBase64(audioContent);
+      // Play the audio and get the URL for caching
+      const audioUrl = await this.playAudioFromBase64(audioContent);
+
+      // Cache the audio URL if we have the original text
+      if (originalText && audioUrl) {
+        this.cacheAudio(originalText, audioUrl);
+      }
 
     } catch (error) {
       errorLogger.log('GoogleCloudTTS', error);
@@ -277,14 +296,12 @@ export class TextToSpeechManager {
 
   /**
    * Play audio from base64 string
+   * @returns {Promise<string>} Returns the audio URL for caching
    */
   async playAudioFromBase64(base64Audio) {
     return new Promise((resolve, reject) => {
-      // Clean up previous audio
-      if (this.currentAudioUrl) {
-        URL.revokeObjectURL(this.currentAudioUrl);
-        this.currentAudioUrl = null;
-      }
+      // Don't revoke previous audio URL yet (it might be cached)
+      // We'll manage cleanup through the cache
 
       // Convert base64 to blob
       const binaryString = atob(base64Audio);
@@ -295,14 +312,15 @@ export class TextToSpeechManager {
       const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
 
       // Create object URL
-      this.currentAudioUrl = URL.createObjectURL(audioBlob);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      this.currentAudioUrl = audioUrl;
 
       // Create or reuse audio element
       if (!this.audioElement) {
         this.audioElement = new Audio();
       }
 
-      this.audioElement.src = this.currentAudioUrl;
+      this.audioElement.src = audioUrl;
 
       // Event handlers
       this.audioElement.onplay = () => {
@@ -319,7 +337,7 @@ export class TextToSpeechManager {
         if (this.onEndCallback) {
           this.onEndCallback();
         }
-        resolve();
+        resolve(audioUrl); // Return the URL for caching
       };
 
       this.audioElement.onerror = (error) => {
@@ -353,6 +371,74 @@ export class TextToSpeechManager {
       this.summaryCache.delete(firstKey);
     }
     this.summaryCache.set(text, summary);
+  }
+
+  /**
+   * Cache an audio URL with LRU eviction
+   */
+  cacheAudio(text, audioUrl) {
+    // If cache is full, remove oldest entry and revoke its URL (LRU)
+    if (this.audioCache.size >= this.maxAudioCacheSize) {
+      const firstKey = this.audioCache.keys().next().value;
+      const oldUrl = this.audioCache.get(firstKey);
+      if (oldUrl) {
+        URL.revokeObjectURL(oldUrl);
+      }
+      this.audioCache.delete(firstKey);
+    }
+    this.audioCache.set(text, audioUrl);
+  }
+
+  /**
+   * Play audio from cached URL (instant playback)
+   */
+  async playCachedAudio(audioUrl) {
+    return new Promise((resolve, reject) => {
+      // Create or reuse audio element
+      if (!this.audioElement) {
+        this.audioElement = new Audio();
+      }
+
+      this.audioElement.src = audioUrl;
+      this.currentAudioUrl = audioUrl;
+
+      // Event handlers
+      this.audioElement.onplay = () => {
+        this.isSpeaking = true;
+        this.isPaused = false;
+        if (this.onStartCallback) {
+          this.onStartCallback();
+        }
+      };
+
+      this.audioElement.onended = () => {
+        this.isSpeaking = false;
+        this.isPaused = false;
+        if (this.onEndCallback) {
+          this.onEndCallback();
+        }
+        resolve();
+      };
+
+      this.audioElement.onerror = (error) => {
+        this.isSpeaking = false;
+        this.isPaused = false;
+        errorLogger.log('CachedAudioPlayback', error);
+        if (this.onErrorCallback) {
+          this.onErrorCallback('Cached audio playback failed');
+        }
+        reject(error);
+      };
+
+      // Play
+      this.audioElement.play().catch(error => {
+        errorLogger.log('CachedAudioPlayStart', error);
+        if (this.onErrorCallback) {
+          this.onErrorCallback('Failed to start cached audio playback');
+        }
+        reject(error);
+      });
+    });
   }
 
   /**
@@ -470,11 +556,8 @@ ${text}`
       this.audioElement.currentTime = 0;
     }
 
-    // Clean up audio URL
-    if (this.currentAudioUrl) {
-      URL.revokeObjectURL(this.currentAudioUrl);
-      this.currentAudioUrl = null;
-    }
+    // Don't revoke audio URL here - it might be cached for replay
+    // URLs are managed by the cache and revoked during cleanup
 
     this.isSpeaking = false;
     this.isPaused = false;
@@ -602,10 +685,21 @@ ${text}`
       this.audioElement = null;
     }
 
-    // Clean up audio URL
-    if (this.currentAudioUrl) {
+    // Clean up current audio URL
+    if (this.currentAudioUrl && !this.audioCache.has(this.currentAudioUrl)) {
+      // Only revoke if it's not in the cache
       URL.revokeObjectURL(this.currentAudioUrl);
       this.currentAudioUrl = null;
+    }
+
+    // Clean up all cached audio URLs
+    if (this.audioCache) {
+      for (const audioUrl of this.audioCache.values()) {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+      }
+      this.audioCache.clear();
     }
 
     // Clear summary cache

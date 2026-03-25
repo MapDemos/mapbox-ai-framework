@@ -1183,16 +1183,36 @@ export class BaseApp {
 
       // Set up callbacks
       this.textToSpeechManager.onPreparing(() => {
-        // When starting to prepare summary, update icons to show loading
+        // When starting to prepare summary, show thinking display and update icons
         this.currentPreparingMessageId = this.currentSpeakingMessageId;
         this.updateMessageSpeakerIcons();
+
+        // Show thinking display if available
+        if (this.thinkingSimulator) {
+          const thinkingDisplay = document.getElementById('thinkingDisplay');
+          const thinkingSteps = document.getElementById('thinkingSteps');
+          if (thinkingDisplay && thinkingSteps) {
+            thinkingDisplay.style.display = 'block';
+            // Start thinking with a TTS-specific message
+            this.thinkingSimulator.startThinking('Generating speech summary...', thinkingSteps);
+          }
+        }
       });
 
       this.textToSpeechManager.onStart(() => {
-        // When speech actually starts, clear preparing state
+        // When speech actually starts, hide thinking display and clear preparing state
         this.currentPreparingMessageId = null;
         this.updateAutoSpeakButtonState();
         this.updateMessageSpeakerIcons();
+
+        // Hide thinking display if available
+        if (this.thinkingSimulator) {
+          const thinkingDisplay = document.getElementById('thinkingDisplay');
+          if (thinkingDisplay) {
+            thinkingDisplay.style.display = 'none';
+          }
+          this.thinkingSimulator.stopThinking();
+        }
       });
 
       this.textToSpeechManager.onEnd(() => {
@@ -1208,6 +1228,15 @@ export class BaseApp {
         this.currentSpeakingMessageId = null;
         this.updateAutoSpeakButtonState();
         this.updateMessageSpeakerIcons();
+
+        // Hide thinking display if available
+        if (this.thinkingSimulator) {
+          const thinkingDisplay = document.getElementById('thinkingDisplay');
+          if (thinkingDisplay) {
+            thinkingDisplay.style.display = 'none';
+          }
+          this.thinkingSimulator.stopThinking();
+        }
       });
 
       // Update button state
