@@ -14,6 +14,7 @@ export class ThinkingSimulator {
     this.currentIndex = 0;
     this.intervalId = null;
     this.containerElement = null;
+    this.overlayStatusElement = null; // Optional overlay status element
     this.startTime = null;
     this.timerIntervalId = null;
   }
@@ -78,9 +79,13 @@ export class ThinkingSimulator {
 
   /**
    * Start cycling through status messages
+   * @param {string} question - The user's question
+   * @param {HTMLElement} containerElement - Main thinking display container
+   * @param {HTMLElement} overlayStatusElement - Optional overlay status element
    */
-  startThinking(question, containerElement) {
+  startThinking(question, containerElement, overlayStatusElement = null) {
     this.containerElement = containerElement;
+    this.overlayStatusElement = overlayStatusElement;
     this.messages = this.shuffleArray(this.generateMessages(question));
     this.currentIndex = 0;
     this.startTime = Date.now();
@@ -103,6 +108,14 @@ export class ThinkingSimulator {
       const timerElement = containerElement.querySelector('.thinking-timer');
       if (timerElement) {
         timerElement.textContent = `${elapsed}s`;
+      }
+
+      // Also update overlay timer if present
+      if (this.overlayStatusElement) {
+        const overlayTimerElement = document.getElementById('thinkingOverlayTimer');
+        if (overlayTimerElement) {
+          overlayTimerElement.textContent = `${elapsed}s`;
+        }
       }
     }, 1000);
 
@@ -143,6 +156,11 @@ export class ThinkingSimulator {
     setTimeout(() => {
       statusElement.style.animation = 'thinkingFade 0.3s ease-in-out';
     }, 10);
+
+    // Also update overlay status if present
+    if (this.overlayStatusElement) {
+      this.overlayStatusElement.textContent = message;
+    }
   }
 
   /**

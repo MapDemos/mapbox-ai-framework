@@ -518,14 +518,16 @@ export class BaseApp {
       if (this.thinkingSimulator) {
         const thinkingDisplay = document.getElementById('thinkingDisplay');
         const thinkingSteps = document.getElementById('thinkingSteps');
+        const overlayStatus = document.getElementById('thinkingOverlayStatus');
+
         if (thinkingDisplay && thinkingSteps) {
           thinkingDisplay.style.display = 'block';
-          this.thinkingSimulator.startThinking(message, thinkingSteps);
+          this.thinkingSimulator.startThinking(message, thinkingSteps, overlayStatus);
         }
       }
 
-      // Show thinking overlay modal (if available)
-      this.showThinkingOverlay();
+      // Show thinking overlay modal with user's message (if available)
+      this.showThinkingOverlay(message);
 
       // Send to AI
       const response = await this.claudeClient.sendMessage(message);
@@ -1366,11 +1368,20 @@ export class BaseApp {
 
   /**
    * Show thinking overlay modal
+   * @param {string} message - Optional user message to display
    */
-  showThinkingOverlay() {
+  showThinkingOverlay(message = null) {
     const overlay = document.getElementById('thinkingOverlay');
     if (overlay) {
       overlay.style.display = 'flex';
+
+      // Set user's question if provided
+      if (message) {
+        const questionElement = document.getElementById('thinkingOverlayQuestion');
+        if (questionElement) {
+          questionElement.textContent = `"${message}"`;
+        }
+      }
     }
   }
 
