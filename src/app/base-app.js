@@ -524,6 +524,9 @@ export class BaseApp {
         }
       }
 
+      // Show thinking overlay modal (if available)
+      this.showThinkingOverlay();
+
       // Send to AI
       const response = await this.claudeClient.sendMessage(message);
 
@@ -556,6 +559,9 @@ export class BaseApp {
         }
         this.thinkingSimulator.stopThinking();
       }
+
+      // Hide thinking overlay modal
+      this.hideThinkingOverlay();
 
       this.isProcessing = false;
     }
@@ -1347,6 +1353,26 @@ export class BaseApp {
         icon.classList.remove('speaking', 'preparing');
       }
     });
+  }
+
+  /**
+   * Show thinking overlay modal
+   */
+  showThinkingOverlay() {
+    const overlay = document.getElementById('thinkingOverlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Hide thinking overlay modal
+   */
+  hideThinkingOverlay() {
+    const overlay = document.getElementById('thinkingOverlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
   }
 
   /**
