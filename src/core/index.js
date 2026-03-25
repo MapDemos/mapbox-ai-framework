@@ -18,3 +18,4 @@ export {
   isLocationInBounds,
   calculateDistance
 } from './geolocation.js';
+export { SpeechRecognitionManager } from './speech-recognition-manager.js';

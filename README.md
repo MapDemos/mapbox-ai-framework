@@ -12,6 +12,7 @@ Build AI-powered map applications in minutes. Combines Mapbox GL JS with Claude/
 - 🔒 **Production Ready**: XSS protection, input sanitization, error handling, token management
 - 📦 **Configurable**: Extensive configuration options with sensible defaults
 - 🌍 **I18n Support**: Built-in internationalization with language switching
+- 🎤 **Speech Recognition**: Voice input with Web Speech API and Google Cloud Speech-to-Text (optimized for LG webOS TVs)
 
 ## Installation
 
@@ -299,7 +300,38 @@ The framework includes 15+ pre-built map tools that AI can use:
 
 Your AI can use these automatically through the MapController!
 
-### 4. AI Clients
+### 4. Speech Recognition
+
+Built-in voice input with automatic platform detection:
+
+**Supported Platforms:**
+- Desktop browsers (Chrome, Edge, Safari) - Web Speech API
+- Mobile browsers (iOS Safari, Chrome Mobile) - Web Speech API
+- LG webOS TVs - MediaRecorder + Google Cloud Speech-to-Text
+- Firefox - MediaRecorder + Google Cloud Speech-to-Text
+
+**Features:**
+- Automatic language detection from i18n settings
+- Visual recording indicators
+- Graceful fallback between recognition methods
+- Production-ready error handling
+
+**Setup:**
+```javascript
+// 1. Enable in config
+SPEECH_RECOGNITION_ENABLED: true,
+SPEECH_AUTO_SEND: true,  // Auto-send after transcription
+
+// 2. Add microphone button to HTML
+<button id="micBtn"><span id="micIcon">🎤</span></button>
+
+// 3. Set Lambda environment variable (for MediaRecorder mode)
+GOOGLE_SPEECH_API_KEY=your_api_key
+```
+
+**See:** [Speech Recognition Documentation](./docs/speech-recognition.md)
+
+### 5. AI Clients
 
 Pre-configured Claude and Gemini clients with:
 - Token tracking with auto-pruning at threshold

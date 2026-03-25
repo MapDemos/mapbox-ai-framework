@@ -12,7 +12,7 @@
  * Extend this class and implement domain-specific logic in your app.
  */
 
-import { I18n, ThinkingSimulator, errorLogger, isLocationInBounds, getUserLocation } from '@mapdemos/ai-framework/core';
+import { I18n, ThinkingSimulator, errorLogger, isLocationInBounds, getUserLocation, SpeechRecognitionManager } from '@mapdemos/ai-framework/core';
 import { MapController } from '@mapdemos/ai-framework/map';
 import { ClaudeClient, GeminiClient } from '@mapdemos/ai-framework/ai';
 
@@ -57,6 +57,9 @@ export class BaseApp {
     this.isProcessing = false;
     this.mapViewUpdateTimer = null;
     this.userLocation = null;
+
+    // Speech recognition
+    this.speechRecognitionManager = null;
 
     // Rate limiting (Token Bucket Algorithm)
     this.lastRequestTime = 0;
@@ -148,6 +151,11 @@ export class BaseApp {
 
       // Setup event listeners
       this.setupEventListeners();
+
+      // Initialize speech recognition if enabled
+      if (this.config.SPEECH_RECOGNITION_ENABLED !== false) {
+        this.initializeSpeechRecognition();
+      }
 
       // Hook for subclass post-initialization logic
       await this.onInitialized();
@@ -353,6 +361,17 @@ export class BaseApp {
     document.getElementById('closeErrorModal')?.addEventListener(
       'click',
       this.eventHandlers.closeError,
+      { signal: this.abortController.signal }
+    );
+
+    // Microphone button for speech recognition
+    this.eventHandlers.micButton = asyncErrorWrapper(
+      () => this.toggleSpeechRecognition(),
+      { context: 'MicButton' }
+    );
+    document.getElementById('micBtn')?.addEventListener(
+      'click',
+      this.eventHandlers.micButton,
       { signal: this.abortController.signal }
     );
   }
@@ -944,6 +963,138 @@ export class BaseApp {
   }
 
   /**
+   * Initialize speech recognition
+   */
+  initializeSpeechRecognition() {
+    try {
+      // Check if speech recognition is supported
+      const hasWebSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      const hasMediaRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+
+      if (!hasWebSpeech && !hasMediaRecorder) {
+        // Hide microphone button if speech recognition is not supported
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+          micBtn.style.display = 'none';
+        }
+        return;
+      }
+
+      // Initialize speech recognition manager
+      const lambdaUrl = this.config.CLAUDE_API_PROXY || this.config.LAMBDA_URL;
+      this.speechRecognitionManager = new SpeechRecognitionManager(
+        this.config,
+        this.i18n,
+        lambdaUrl
+      );
+
+      // Set up callbacks
+      this.speechRecognitionManager.onTranscript((transcript) => {
+        this.handleSpeechTranscript(transcript);
+      });
+
+      this.speechRecognitionManager.onError((error) => {
+        this.handleSpeechError(error);
+      });
+
+      this.speechRecognitionManager.onStart(() => {
+        this.updateMicrophoneButtonState(true);
+      });
+
+      this.speechRecognitionManager.onStop(() => {
+        this.updateMicrophoneButtonState(false);
+      });
+
+    } catch (error) {
+      errorLogger.log('SpeechRecognitionInit', error);
+      // Silently fail - speech recognition is optional
+    }
+  }
+
+  /**
+   * Toggle speech recognition on/off
+   */
+  async toggleSpeechRecognition() {
+    if (!this.speechRecognitionManager) {
+      return;
+    }
+
+    if (this.speechRecognitionManager.isRecording) {
+      await this.speechRecognitionManager.stopRecording();
+    } else {
+      await this.speechRecognitionManager.startRecording();
+    }
+  }
+
+  /**
+   * Handle speech transcript
+   */
+  handleSpeechTranscript(transcript) {
+    if (!transcript) {
+      return;
+    }
+
+    // Put transcript into chat input
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+      chatInput.value = transcript;
+
+      // Optionally auto-send the message
+      if (this.config.SPEECH_AUTO_SEND !== false) {
+        this.handleUserInput();
+      }
+    }
+  }
+
+  /**
+   * Handle speech recognition errors
+   */
+  handleSpeechError(error) {
+    errorLogger.log('SpeechRecognitionError', error);
+
+    // Show user-friendly error message
+    let errorMessage = this.i18n.t('error.speechRecognitionMessage');
+
+    // Provide specific error messages for common issues
+    if (typeof error === 'string') {
+      if (error.includes('not-allowed') || error.includes('permission')) {
+        errorMessage = this.i18n.t('error.microphonePermissionMessage');
+      } else if (error.includes('no-speech')) {
+        errorMessage = this.i18n.t('error.noSpeechMessage');
+      }
+    }
+
+    this.showError(
+      this.i18n.t('error.speechRecognitionTitle'),
+      errorMessage
+    );
+  }
+
+  /**
+   * Update microphone button visual state
+   */
+  updateMicrophoneButtonState(isRecording) {
+    const micBtn = document.getElementById('micBtn');
+    const micIcon = document.getElementById('micIcon');
+
+    if (!micBtn) {
+      return;
+    }
+
+    if (isRecording) {
+      micBtn.classList.add('recording');
+      if (micIcon) {
+        micIcon.textContent = '⏹️'; // Stop icon
+      }
+    } else {
+      micBtn.classList.remove('recording');
+      if (micIcon) {
+        micIcon.textContent = '🎤'; // Microphone icon
+      }
+    }
+  }
+
+  /**
    * Remove event listeners
    */
   removeEventListeners() {
@@ -961,6 +1112,10 @@ export class BaseApp {
    */
   async cleanup() {
     this.removeEventListeners();
+
+    if (this.speechRecognitionManager) {
+      this.speechRecognitionManager.cleanup();
+    }
 
     if (this.mapController) {
       await this.mapController.cleanup();

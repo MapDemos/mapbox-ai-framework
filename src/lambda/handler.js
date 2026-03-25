@@ -146,18 +146,23 @@ export const handler = async (event) => {
     // Parse request body
     const requestBody = JSON.parse(event.body);
 
-    // Determine AI provider from header or request body
-    const aiProvider = event.headers['x-ai-provider'] ||
-                       requestBody.provider ||
-                       process.env.DEFAULT_AI_PROVIDER ||
-                       'claude';
+    // Determine provider from header or request body
+    const provider = event.headers['x-ai-provider'] ||
+                     requestBody.provider ||
+                     process.env.DEFAULT_AI_PROVIDER ||
+                     'claude';
+
+    // Handle Google Speech-to-Text requests
+    if (provider === 'google-speech') {
+      return await handleGoogleSpeech(requestBody);
+    }
 
     // Check if streaming is requested
     if (requestBody.stream === true) {
-      return await handleStreamingRequest(aiProvider, requestBody);
+      return await handleStreamingRequest(provider, requestBody);
     }
 
-    if (aiProvider === 'gemini') {
+    if (provider === 'gemini') {
       return await handleGemini(requestBody);
     } else {
       return await handleClaude(requestBody);
@@ -330,6 +335,71 @@ async function handleGemini(requestBody) {
 
   if (!response.ok) {
     console.error('[Gemini] API error:', response.status, data);
+    return {
+      statusCode: response.status,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: data })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  };
+}
+
+/**
+ * Handle Google Cloud Speech-to-Text API requests
+ */
+async function handleGoogleSpeech(requestBody) {
+  const apiKey = process.env.GOOGLE_SPEECH_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_SPEECH_API_KEY or GOOGLE_API_KEY not configured');
+  }
+
+  const { audioData, languageCode } = requestBody;
+
+  if (!audioData) {
+    return {
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Missing audioData in request' })
+    };
+  }
+
+  // Prepare Google Speech-to-Text API request
+  const speechRequest = {
+    config: {
+      encoding: 'WEBM_OPUS',
+      sampleRateHertz: 48000,
+      languageCode: languageCode || 'en-US',
+      enableAutomaticPunctuation: true,
+      model: 'default'
+    },
+    audio: {
+      content: audioData
+    }
+  };
+
+  const apiUrl = `https://speech.googleapis.com/v1/speech:recognize?key=${apiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(speechRequest)
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('[Google Speech] API error:', response.status, data);
     return {
       statusCode: response.status,
       headers: {
