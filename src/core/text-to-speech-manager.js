@@ -53,6 +53,12 @@ export class TextToSpeechManager {
     this.onEndCallback = null;
     this.onErrorCallback = null;
 
+    // Background thinking audio (Web Audio API)
+    this.audioContext = null;
+    this.thinkingOscillator = null;
+    this.thinkingGainNode = null;
+    this.isThinkingAudioPlaying = false;
+
     // Initialize voices for Web Speech API
     if (!this.useGoogleCloudTTS && this.synthesis) {
       this.loadVoices();
@@ -629,10 +635,76 @@ ${text}`
   }
 
   /**
+   * Start playing background thinking audio
+   * Subtle tone that plays during long AI processing times
+   */
+  startThinkingAudio() {
+    if (this.isThinkingAudioPlaying) return;
+
+    try {
+      // Create audio context
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Create oscillator (subtle tone)
+      this.thinkingOscillator = this.audioContext.createOscillator();
+      this.thinkingGainNode = this.audioContext.createGain();
+
+      // Configure: 440Hz tone (A4 note), very low volume
+      this.thinkingOscillator.frequency.value = 440;
+      this.thinkingGainNode.gain.value = 0.03; // Very quiet (3% volume)
+
+      // Connect: oscillator -> gain -> output
+      this.thinkingOscillator.connect(this.thinkingGainNode);
+      this.thinkingGainNode.connect(this.audioContext.destination);
+
+      // Start oscillator
+      this.thinkingOscillator.start();
+      this.isThinkingAudioPlaying = true;
+
+    } catch (error) {
+      errorLogger.log('StartThinkingAudio', error);
+    }
+  }
+
+  /**
+   * Stop playing background thinking audio
+   */
+  stopThinkingAudio() {
+    if (!this.isThinkingAudioPlaying) return;
+
+    try {
+      // Stop oscillator
+      if (this.thinkingOscillator) {
+        this.thinkingOscillator.stop();
+        this.thinkingOscillator.disconnect();
+        this.thinkingOscillator = null;
+      }
+
+      // Clean up gain node
+      if (this.thinkingGainNode) {
+        this.thinkingGainNode.disconnect();
+        this.thinkingGainNode = null;
+      }
+
+      // Close audio context
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+
+      this.isThinkingAudioPlaying = false;
+
+    } catch (error) {
+      errorLogger.log('StopThinkingAudio', error);
+    }
+  }
+
+  /**
    * Clean up resources
    */
   cleanup() {
     this.stop();
+    this.stopThinkingAudio();
 
     // Clean up audio element
     if (this.audioElement) {
