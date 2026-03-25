@@ -521,11 +521,6 @@ export class BaseApp {
         if (thinkingDisplay && thinkingSteps) {
           thinkingDisplay.style.display = 'block';
           this.thinkingSimulator.startThinking(message, thinkingSteps);
-
-          // Start background thinking audio during long waits
-          if (this.textToSpeechManager) {
-            this.textToSpeechManager.startThinkingAudio();
-          }
         }
       }
 
@@ -560,11 +555,6 @@ export class BaseApp {
           thinkingDisplay.style.display = 'none';
         }
         this.thinkingSimulator.stopThinking();
-
-        // Stop background thinking audio
-        if (this.textToSpeechManager) {
-          this.textToSpeechManager.stopThinkingAudio();
-        }
       }
 
       this.isProcessing = false;
@@ -1223,9 +1213,6 @@ export class BaseApp {
           }
           this.thinkingSimulator.stopThinking();
         }
-
-        // Stop background thinking audio when speech starts
-        this.textToSpeechManager.stopThinkingAudio();
       });
 
       this.textToSpeechManager.onEnd(() => {
@@ -1250,9 +1237,6 @@ export class BaseApp {
           }
           this.thinkingSimulator.stopThinking();
         }
-
-        // Stop background thinking audio on error
-        this.textToSpeechManager.stopThinkingAudio();
       });
 
       // Update button state
