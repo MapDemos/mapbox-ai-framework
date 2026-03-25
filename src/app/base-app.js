@@ -1300,20 +1300,10 @@ export class BaseApp {
 
       // Set up callbacks
       this.textToSpeechManager.onPreparing(() => {
-        // When starting to prepare summary, show thinking display and update icons
+        // When starting to prepare summary, just update icons
+        // Don't restart thinking - let it continue from finally block to preserve timer
         this.currentPreparingMessageId = this.currentSpeakingMessageId;
         this.updateMessageSpeakerIcons();
-
-        // Show thinking display if available
-        if (this.thinkingSimulator) {
-          const thinkingDisplay = document.getElementById('thinkingDisplay');
-          const thinkingSteps = document.getElementById('thinkingSteps');
-          if (thinkingDisplay && thinkingSteps) {
-            thinkingDisplay.style.display = 'block';
-            // Start thinking with a TTS-specific message
-            this.thinkingSimulator.startThinking('Generating speech summary...', thinkingSteps);
-          }
-        }
       });
 
       this.textToSpeechManager.onStart(() => {
