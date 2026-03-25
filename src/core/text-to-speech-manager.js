@@ -315,7 +315,7 @@ export class TextToSpeechManager {
 
   /**
    * Clean text for better speech output
-   * Removes markdown, emojis, special characters
+   * Removes markdown, emojis, verbose data (addresses, prices, hours, phone numbers)
    */
   cleanTextForSpeech(text) {
     if (!text) return '';
@@ -328,6 +328,45 @@ export class TextToSpeechManager {
     cleaned = cleaned.replace(/`(.*?)`/g, '$1');       // Code
     cleaned = cleaned.replace(/\[(.*?)\]\(.*?\)/g, '$1'); // Links
 
+    // Remove parenthetical content (Japanese translations, supplemental info)
+    cleaned = cleaned.replace(/\([^)]*\)/g, '');
+
+    // Remove star/number markers for POI rankings
+    cleaned = cleaned.replace(/[⭐✨🌟]+\d*/g, ''); // Stars with optional numbers
+    cleaned = cleaned.replace(/^\d+\.\s*/gm, '');   // Leading numbers like "1. ", "2. "
+
+    // Remove addresses (entire lines containing address patterns)
+    cleaned = cleaned.replace(/Address:.*?(?=\n|$)/gi, '');
+    cleaned = cleaned.replace(/.*?[都道府県市区町村].*?(?=\n|$)/g, ''); // Japanese addresses
+    cleaned = cleaned.replace(/.*?-ku\b.*?(?=\n|$)/gi, ''); // Ward names like "Shibuya-ku"
+
+    // Remove phone numbers
+    cleaned = cleaned.replace(/Tel:.*?(?=\n|$)/gi, '');
+    cleaned = cleaned.replace(/Phone:.*?(?=\n|$)/gi, '');
+    cleaned = cleaned.replace(/電話.*?(?=\n|$)/g, '');
+    cleaned = cleaned.replace(/\b\d{2,4}[-.]?\d{4}[-.]?\d{4}\b/g, ''); // Phone patterns
+
+    // Remove opening hours / time ranges
+    cleaned = cleaned.replace(/\d{1,2}:\d{2}\s*[-~]\s*\d{1,2}:\d{2}/g, ''); // 11:00-23:00
+    cleaned = cleaned.replace(/営業時間.*?(?=\n|$)/g, ''); // Japanese hours
+    cleaned = cleaned.replace(/Hours:.*?(?=\n|$)/gi, '');
+
+    // Remove prices
+    cleaned = cleaned.replace(/¥[\d,]+(?:\s*[-~]\s*¥?[\d,]+)?/g, ''); // ¥980 or ¥1,800-3,000
+    cleaned = cleaned.replace(/価格情報なし/g, ''); // "No price info"
+    cleaned = cleaned.replace(/Price.*?(?=\n|$)/gi, '');
+
+    // Remove coordinates
+    cleaned = cleaned.replace(/\d+\.\d+\s*,\s*\d+\.\d+/g, ''); // Lat/lng pairs
+    cleaned = cleaned.replace(/\d+°[NS]\s*,\s*\d+°[EW]/g, ''); // Degree notation
+
+    // Remove "not available" statements for missing data
+    cleaned = cleaned.replace(/営業時間情報なし/g, '');
+    cleaned = cleaned.replace(/電話番号情報なし/g, '');
+    cleaned = cleaned.replace(/Hours not available/gi, '');
+    cleaned = cleaned.replace(/Phone not listed/gi, '');
+    cleaned = cleaned.replace(/Price not listed/gi, '');
+
     // Remove emojis (they don't speak well)
     cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
     cleaned = cleaned.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Misc Symbols
@@ -338,6 +377,10 @@ export class TextToSpeechManager {
 
     // Remove multiple spaces/newlines
     cleaned = cleaned.replace(/\s+/g, ' ');
+
+    // Remove extra punctuation artifacts
+    cleaned = cleaned.replace(/\s*[-,]\s*$/gm, ''); // Trailing dashes/commas
+    cleaned = cleaned.replace(/\s+[-,]\s+/g, ' '); // Isolated dashes/commas
 
     // Trim
     cleaned = cleaned.trim();
