@@ -278,13 +278,24 @@ export class TextToSpeechManager {
         throw new Error('No audio content received from Google Cloud TTS');
       }
 
-      // Play the audio and get the URL for caching
-      const audioUrl = await this.playAudioFromBase64(audioContent);
+      // Convert base64 to blob and create URL
+      const binaryString = atob(audioContent);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(audioBlob);
 
-      // Cache the audio URL if we have the original text
-      if (originalText && audioUrl) {
+      // Cache the audio URL BEFORE playing (for instant replay)
+      if (originalText) {
         this.cacheAudio(originalText, audioUrl);
       }
+
+      // Now play the audio (don't await - let it play in background)
+      this.playAudioFromUrl(audioUrl).catch(error => {
+        errorLogger.log('AudioPlayback', error);
+      });
 
     } catch (error) {
       errorLogger.log('GoogleCloudTTS', error);
@@ -295,24 +306,12 @@ export class TextToSpeechManager {
   }
 
   /**
-   * Play audio from base64 string
-   * @returns {Promise<string>} Returns the audio URL for caching
+   * Play audio from URL
+   * @param {string} audioUrl - Blob URL to play
+   * @returns {Promise<void>} Resolves when audio finishes playing
    */
-  async playAudioFromBase64(base64Audio) {
+  async playAudioFromUrl(audioUrl) {
     return new Promise((resolve, reject) => {
-      // Don't revoke previous audio URL yet (it might be cached)
-      // We'll manage cleanup through the cache
-
-      // Convert base64 to blob
-      const binaryString = atob(base64Audio);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
-
-      // Create object URL
-      const audioUrl = URL.createObjectURL(audioBlob);
       this.currentAudioUrl = audioUrl;
 
       // Create or reuse audio element
@@ -337,7 +336,7 @@ export class TextToSpeechManager {
         if (this.onEndCallback) {
           this.onEndCallback();
         }
-        resolve(audioUrl); // Return the URL for caching
+        resolve();
       };
 
       this.audioElement.onerror = (error) => {
@@ -393,52 +392,8 @@ export class TextToSpeechManager {
    * Play audio from cached URL (instant playback)
    */
   async playCachedAudio(audioUrl) {
-    return new Promise((resolve, reject) => {
-      // Create or reuse audio element
-      if (!this.audioElement) {
-        this.audioElement = new Audio();
-      }
-
-      this.audioElement.src = audioUrl;
-      this.currentAudioUrl = audioUrl;
-
-      // Event handlers
-      this.audioElement.onplay = () => {
-        this.isSpeaking = true;
-        this.isPaused = false;
-        if (this.onStartCallback) {
-          this.onStartCallback();
-        }
-      };
-
-      this.audioElement.onended = () => {
-        this.isSpeaking = false;
-        this.isPaused = false;
-        if (this.onEndCallback) {
-          this.onEndCallback();
-        }
-        resolve();
-      };
-
-      this.audioElement.onerror = (error) => {
-        this.isSpeaking = false;
-        this.isPaused = false;
-        errorLogger.log('CachedAudioPlayback', error);
-        if (this.onErrorCallback) {
-          this.onErrorCallback('Cached audio playback failed');
-        }
-        reject(error);
-      };
-
-      // Play
-      this.audioElement.play().catch(error => {
-        errorLogger.log('CachedAudioPlayStart', error);
-        if (this.onErrorCallback) {
-          this.onErrorCallback('Failed to start cached audio playback');
-        }
-        reject(error);
-      });
-    });
+    // Reuse the same playback logic
+    return this.playAudioFromUrl(audioUrl);
   }
 
   /**
