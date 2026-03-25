@@ -555,6 +555,11 @@ The framework includes a production-ready Lambda handler for proxying AI API cal
      --cors '{"AllowOrigins": ["https://yourdomain.com"], "AllowMethods": ["POST"], "AllowHeaders": ["*"]}'
    ```
 
+4. **Production Deployment Note:**
+   - **japan-daytrip-mcp** uses function: `japan-ai-proxy` (us-east-1)
+   - Function URL: `https://okqfpyxf4oe6htegrlcgrwdssa0yoxcr.lambda-url.us-east-1.on.aws/`
+   - To update: Use `./src/lambda/deploy-lambda.sh` script or update via AWS Console
+
 ## Advanced Usage
 
 ### Custom Lifecycle Hooks

@@ -449,8 +449,9 @@ async function handleGoogleTTS(requestBody) {
     },
     voice: {
       languageCode: languageCode || 'en-US',
-      name: voiceName || undefined, // Use default if not specified
-      ssmlGender: 'NEUTRAL' // or MALE/FEMALE
+      name: voiceName || undefined // Use default if not specified
+      // Note: Don't specify ssmlGender when using named voices (Neural2, WaveNet)
+      // The voice name already defines the gender
     },
     audioConfig: {
       audioEncoding: 'MP3',

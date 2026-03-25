@@ -253,7 +253,7 @@ export class TextToSpeechManager {
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      const audioBlob = new Blob([bytes], { type: 'audio/mp3' });
+      const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
 
       // Create object URL
       this.currentAudioUrl = URL.createObjectURL(audioBlob);
