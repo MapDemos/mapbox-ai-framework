@@ -112,18 +112,30 @@ export class TextToSpeechManager {
     // Stop any current speech
     this.stop();
 
-    // Clean text for better speech
-    const cleanText = this.cleanTextForSpeech(text);
+    // Get AI summary for speech (if enabled)
+    let speechText = text;
+    if (this.config.TTS_USE_AI_SUMMARY) {
+      try {
+        speechText = await this.getSpeechSummary(text);
+      } catch (error) {
+        errorLogger.log('SpeechSummary', error);
+        // If summary fails, don't speak (user requested no fallback)
+        if (this.onErrorCallback) {
+          this.onErrorCallback('Failed to generate speech summary');
+        }
+        return;
+      }
+    }
 
-    if (!cleanText) {
+    if (!speechText) {
       return;
     }
 
     // Route to appropriate TTS method
     if (this.useGoogleCloudTTS) {
-      await this.speakWithGoogleCloud(cleanText, options);
+      await this.speakWithGoogleCloud(speechText, options);
     } else {
-      this.speakWithWebSpeech(cleanText, options);
+      this.speakWithWebSpeech(speechText, options);
     }
   }
 
@@ -314,90 +326,69 @@ export class TextToSpeechManager {
   }
 
   /**
-   * Clean text for better speech output
-   * Removes markdown, emojis, verbose data (addresses, prices, hours, phone numbers)
+   * Get AI-generated summary optimized for text-to-speech
+   * Sends the full text to AI for intelligent summarization
    */
-  cleanTextForSpeech(text) {
+  async getSpeechSummary(text) {
     if (!text) return '';
 
-    let cleaned = text;
+    try {
+      const currentLang = this.i18n.getCurrentLanguage();
+      const languageInstruction = currentLang === 'ja'
+        ? 'Respond in Japanese.'
+        : 'Respond in English.';
 
-    // Remove markdown formatting
-    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1'); // Bold
-    cleaned = cleaned.replace(/\*(.*?)\*/g, '$1');     // Italic
-    cleaned = cleaned.replace(/`(.*?)`/g, '$1');       // Code
-    cleaned = cleaned.replace(/\[(.*?)\]\(.*?\)/g, '$1'); // Links
+      const response = await fetch(this.lambdaUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          provider: 'claude', // Use Claude for summarization
+          model: 'claude-sonnet-4-6',
+          max_tokens: 500,
+          temperature: 0.3, // Lower temperature for consistent summaries
+          messages: [{
+            role: 'user',
+            content: `Summarize this text for text-to-speech audio. Keep only the natural conversational content that sounds good when spoken aloud. ${languageInstruction}
 
-    // Remove all emojis first (including common UI emojis like 📍🕐📞💰🍴)
-    // This covers ALL emoji ranges comprehensively
-    cleaned = cleaned.replace(/[\u{1F000}-\u{1F9FF}]/gu, ''); // All emoji blocks
-    cleaned = cleaned.replace(/[\u{2600}-\u{27BF}]/gu, '');   // Misc symbols & Dingbats
-    cleaned = cleaned.replace(/[\u{2300}-\u{23FF}]/gu, '');   // Misc Technical
-    cleaned = cleaned.replace(/[\u{2B00}-\u{2BFF}]/gu, '');   // Misc Symbols and Arrows
-    cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}]/gu, '');   // Variation Selectors
+RULES:
+- Remove ALL addresses, phone numbers, opening hours, prices, coordinates, and emojis
+- Remove parenthetical content (translations, supplemental info)
+- Remove star markers (⭐), number prefixes (1., 2., 3.), and horizontal rules (---)
+- Keep the essential information: place names and their key descriptions
+- Be concise and natural - optimize for listening, not reading
+- Preserve the language of place names exactly as written
 
-    // Remove entire lines with location/time/phone prefixes (after emoji removal)
-    // These lines typically start with emoji then contain address/time/phone
-    cleaned = cleaned.replace(/^[\s]*[📍🏠🗺️].*$/gm, ''); // Location lines
-    cleaned = cleaned.replace(/^[\s]*[🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛⏰⌚].*$/gm, ''); // Time lines
-    cleaned = cleaned.replace(/^[\s]*[📞☎️📱].*$/gm, ''); // Phone lines
+Text to summarize:
+${text}`
+          }]
+        })
+      });
 
-    // Remove parenthetical content (Japanese translations, supplemental info)
-    cleaned = cleaned.replace(/\([^)]*\)/g, '');
+      if (!response.ok) {
+        throw new Error(`Speech summary API failed: ${response.status} ${response.statusText}`);
+      }
 
-    // Remove star/number markers for POI rankings
-    cleaned = cleaned.replace(/[⭐✨🌟]+\d*/g, ''); // Stars with optional numbers
-    cleaned = cleaned.replace(/^\d+\.\s*/gm, '');   // Leading numbers like "1. ", "2. "
+      const data = await response.json();
 
-    // Remove horizontal rules
-    cleaned = cleaned.replace(/^[\s]*[-—_]{3,}[\s]*$/gm, ''); // ---, ___
+      // Extract summary text from response
+      let summary = '';
+      if (data.content && Array.isArray(data.content)) {
+        // Claude response format
+        const textContent = data.content.find(item => item.type === 'text');
+        summary = textContent ? textContent.text : '';
+      } else if (data.message) {
+        // Alternative format
+        summary = data.message;
+      }
 
-    // Remove addresses (entire lines containing address patterns)
-    cleaned = cleaned.replace(/Address:.*?(?=\n|$)/gi, '');
-    cleaned = cleaned.replace(/.*?[都道府県市区町村].*?(?=\n|$)/g, ''); // Japanese addresses
-    cleaned = cleaned.replace(/.*?-ku\b.*?(?=\n|$)/gi, ''); // Ward names like "Naka-ku"
-    cleaned = cleaned.replace(/.*?\d+.*?cho\b.*?(?=\n|$)/gi, ''); // Street names like "Yamashitacho"
+      return summary.trim();
 
-    // Remove phone numbers (handle various formats)
-    cleaned = cleaned.replace(/Tel:.*?(?=\n|$)/gi, '');
-    cleaned = cleaned.replace(/Phone:.*?(?=\n|$)/gi, '');
-    cleaned = cleaned.replace(/電話.*?(?=\n|$)/g, '');
-    cleaned = cleaned.replace(/\b\d{2,5}[-.]?\d{3,4}[-.]?\d{4}\b/g, ''); // Phone patterns (e.g., 045-681-1841)
-
-    // Remove opening hours / time ranges (handle en-dash, em-dash, hyphen, tilde)
-    cleaned = cleaned.replace(/\d{1,2}:\d{2}\s*[–—\-~]\s*\d{1,2}:\d{2}/g, ''); // Handle multiple dash types
-    cleaned = cleaned.replace(/\(last order.*?\)/gi, ''); // (last order 21:00)
-    cleaned = cleaned.replace(/営業時間.*?(?=\n|$)/g, ''); // Japanese hours
-    cleaned = cleaned.replace(/Hours:.*?(?=\n|$)/gi, '');
-
-    // Remove prices
-    cleaned = cleaned.replace(/¥[\d,]+(?:\s*[–—\-~]\s*¥?[\d,]+)?/g, ''); // Handle multiple dash types
-    cleaned = cleaned.replace(/\$[\d,]+(?:\s*[–—\-~]\s*\$?[\d,]+)?/g, ''); // Dollar prices
-    cleaned = cleaned.replace(/価格情報なし/g, ''); // "No price info"
-    cleaned = cleaned.replace(/Price.*?(?=\n|$)/gi, '');
-
-    // Remove coordinates
-    cleaned = cleaned.replace(/\d+\.\d+\s*,\s*\d+\.\d+/g, ''); // Lat/lng pairs
-    cleaned = cleaned.replace(/\d+°[NS]\s*,\s*\d+°[EW]/g, ''); // Degree notation
-
-    // Remove "not available" statements for missing data
-    cleaned = cleaned.replace(/営業時間情報なし/g, '');
-    cleaned = cleaned.replace(/電話番号情報なし/g, '');
-    cleaned = cleaned.replace(/Hours not available/gi, '');
-    cleaned = cleaned.replace(/Phone not listed/gi, '');
-    cleaned = cleaned.replace(/Price not listed/gi, '');
-
-    // Remove multiple spaces/newlines
-    cleaned = cleaned.replace(/\s+/g, ' ');
-
-    // Remove extra punctuation artifacts
-    cleaned = cleaned.replace(/\s*[–—\-,]\s*$/gm, ''); // Trailing dashes/commas (all dash types)
-    cleaned = cleaned.replace(/\s+[–—\-,]\s+/g, ' '); // Isolated dashes/commas
-
-    // Trim
-    cleaned = cleaned.trim();
-
-    return cleaned;
+    } catch (error) {
+      errorLogger.log('GetSpeechSummary', error);
+      throw error;
+    }
   }
 
   /**
