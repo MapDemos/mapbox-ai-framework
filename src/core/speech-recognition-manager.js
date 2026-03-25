@@ -134,7 +134,19 @@ export class SpeechRecognitionManager {
         const currentLang = this.i18n.getCurrentLanguage();
         this.recognition.lang = currentLang === 'ja' ? 'ja-JP' : 'en-US';
 
-        this.recognition.start();
+        try {
+          this.recognition.start();
+        } catch (startError) {
+          // If start() fails (e.g., already started), try aborting and reinitializing
+          if (startError.message && startError.message.includes('already')) {
+            this.recognition.abort();
+            // Wait a bit for abort to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            this.recognition.start();
+          } else {
+            throw startError;
+          }
+        }
 
         if (this.onStartCallback) {
           this.onStartCallback();
@@ -144,6 +156,7 @@ export class SpeechRecognitionManager {
         await this.startMediaRecording();
       }
     } catch (error) {
+      this.isRecording = false; // Reset state on error
       errorLogger.log('StartRecording', error);
       if (this.onErrorCallback) {
         this.onErrorCallback(error.message || 'Failed to start recording');
