@@ -560,8 +560,11 @@ export class BaseApp {
         this.thinkingSimulator.stopThinking();
       }
 
-      // Hide thinking overlay modal
-      this.hideThinkingOverlay();
+      // Only hide overlay if TTS won't be auto-speaking (it will hide when speech starts)
+      const willAutoSpeak = this.textToSpeechManager && this.textToSpeechManager.isAutoSpeakEnabled();
+      if (!willAutoSpeak) {
+        this.hideThinkingOverlay();
+      }
 
       this.isProcessing = false;
     }
@@ -1219,6 +1222,9 @@ export class BaseApp {
           }
           this.thinkingSimulator.stopThinking();
         }
+
+        // Hide thinking overlay when speech starts
+        this.hideThinkingOverlay();
       });
 
       this.textToSpeechManager.onEnd(() => {
@@ -1243,6 +1249,9 @@ export class BaseApp {
           }
           this.thinkingSimulator.stopThinking();
         }
+
+        // Hide thinking overlay on error
+        this.hideThinkingOverlay();
       });
 
       // Update button state
