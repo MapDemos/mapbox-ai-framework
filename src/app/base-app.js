@@ -524,24 +524,8 @@ export class BaseApp {
         }
       }
 
-      // Start thinking speech if TTS auto-speak is enabled and feature is configured
-      const useThinkingSpeech = this.config.TTS_USE_THINKING_SPEECH !== false; // Default true
-      if (this.textToSpeechManager &&
-          this.textToSpeechManager.isAutoSpeakEnabled() &&
-          useThinkingSpeech) {
-        // Start thinking speech in parallel (don't await - let it run in background)
-        this.textToSpeechManager.speakThinkingSpeech(message).catch(error => {
-          errorLogger.log('ThinkingSpeech', error);
-        });
-      }
-
       // Send to AI
       const response = await this.claudeClient.sendMessage(message);
-
-      // Interrupt thinking speech if it's still playing
-      if (this.textToSpeechManager && this.textToSpeechManager.isPlayingThinkingSpeech) {
-        await this.textToSpeechManager.interruptThinkingSpeech();
-      }
 
       // Add assistant response
       this.addAssistantMessage(response.text, response.thinking);

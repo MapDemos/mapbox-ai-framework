@@ -53,10 +53,6 @@ export class TextToSpeechManager {
     this.onEndCallback = null;
     this.onErrorCallback = null;
 
-    // Thinking speech state (for filling wait time with contextual small talk)
-    this.isPlayingThinkingSpeech = false;
-    this.thinkingSpeechController = null; // AbortController to cancel thinking speech generation
-
     // Initialize voices for Web Speech API
     if (!this.useGoogleCloudTTS && this.synthesis) {
       this.loadVoices();
@@ -466,157 +462,6 @@ ${text}`
   }
 
   /**
-   * Generate contextual thinking speech (small talk while waiting for search)
-   * @param {string} question - User's question
-   * @returns {Promise<string>} Generated thinking speech content
-   */
-  async generateThinkingSpeech(question) {
-    if (!question) return '';
-
-    try {
-      const currentLang = this.i18n.getCurrentLanguage();
-      const languageInstruction = currentLang === 'ja'
-        ? 'Respond entirely in Japanese.'
-        : 'Respond entirely in English.';
-
-      const intro = currentLang === 'ja'
-        ? '検索している間に、興味深いことをお話ししますね。'
-        : 'While I search, let me tell you something interesting.';
-
-      const response = await fetch(this.lambdaUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 500,
-          temperature: 0.7, // Slightly higher for more conversational tone
-          messages: [{
-            role: 'user',
-            content: `Generate about 1 minute of friendly, conversational small talk related to: "${question}"
-
-${languageInstruction}
-
-RULES:
-- Start with: "${intro}"
-- Be warm, conversational, and educational
-- Share interesting facts or context about the topic
-- Keep it natural and engaging, as if chatting with a friend
-- Make it about 200-250 words (roughly 1 minute of speech)
-- Focus on general context, history, or interesting tidbits
-- Do NOT provide specific recommendations or answers
-- End naturally without prompting questions
-
-Example topics to cover:
-- Historical context
-- Cultural significance
-- Interesting facts
-- General characteristics of the area/topic`
-          }]
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Thinking speech API failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      // Extract speech text from response
-      let speechText = '';
-      if (data.content && Array.isArray(data.content)) {
-        const textContent = data.content.find(item => item.type === 'text');
-        speechText = textContent ? textContent.text : '';
-      } else if (data.message) {
-        speechText = data.message;
-      }
-
-      return speechText.trim();
-
-    } catch (error) {
-      errorLogger.log('GenerateThinkingSpeech', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Start thinking speech (plays while waiting for main search)
-   * @param {string} question - User's question
-   */
-  async speakThinkingSpeech(question) {
-    if (this.isPlayingThinkingSpeech) {
-      return; // Already playing
-    }
-
-    try {
-      // Create abort controller for cancellation
-      this.thinkingSpeechController = new AbortController();
-
-      this.isPlayingThinkingSpeech = true;
-
-      // Generate thinking speech
-      const thinkingText = await this.generateThinkingSpeech(question);
-
-      // Check if we were cancelled while generating
-      if (this.thinkingSpeechController.signal.aborted) {
-        this.isPlayingThinkingSpeech = false;
-        return;
-      }
-
-      if (!thinkingText) {
-        this.isPlayingThinkingSpeech = false;
-        return;
-      }
-
-      // Speak the thinking content (using existing speak method infrastructure)
-      // We'll use speakWithGoogleCloud directly to avoid caching and summary processing
-      if (this.useGoogleCloudTTS) {
-        await this.speakWithGoogleCloud(thinkingText, {});
-      } else {
-        this.speakWithWebSpeech(thinkingText, {});
-      }
-
-    } catch (error) {
-      errorLogger.log('SpeakThinkingSpeech', error);
-      this.isPlayingThinkingSpeech = false;
-    }
-  }
-
-  /**
-   * Interrupt thinking speech with graceful transition
-   * Speaks a transition phrase then stops
-   */
-  async interruptThinkingSpeech() {
-    if (!this.isPlayingThinkingSpeech) {
-      return;
-    }
-
-    // Cancel any pending thinking speech generation
-    if (this.thinkingSpeechController) {
-      this.thinkingSpeechController.abort();
-    }
-
-    // Stop current speech
-    this.stop();
-
-    // Speak transition phrase
-    const currentLang = this.i18n.getCurrentLanguage();
-    const transitionPhrase = currentLang === 'ja'
-      ? 'あ、結果が出ました！'
-      : 'Oh, got the results!';
-
-    this.isPlayingThinkingSpeech = false;
-
-    // Speak transition (brief, so don't cache or summarize)
-    if (this.useGoogleCloudTTS) {
-      await this.speakWithGoogleCloud(transitionPhrase, {});
-    } else {
-      this.speakWithWebSpeech(transitionPhrase, {});
-    }
-  }
-
-  /**
    * Pause speech
    */
   pause() {
@@ -788,13 +633,6 @@ Example topics to cover:
    */
   cleanup() {
     this.stop();
-
-    // Stop thinking speech
-    if (this.thinkingSpeechController) {
-      this.thinkingSpeechController.abort();
-      this.thinkingSpeechController = null;
-    }
-    this.isPlayingThinkingSpeech = false;
 
     // Clean up audio element
     if (this.audioElement) {
