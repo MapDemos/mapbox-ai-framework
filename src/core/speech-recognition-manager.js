@@ -90,7 +90,7 @@ export class SpeechRecognitionManager {
 
     // Set language based on i18n
     const currentLang = this.i18n.getCurrentLanguage();
-    this.recognition.lang = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+    this.recognition.lang = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
     // Handle results
     this.recognition.onresult = (event) => {
