@@ -39,8 +39,13 @@ export class TextToSpeechManager {
     this.audioElement = null;
     this.currentAudioUrl = null;
 
+    // Summary cache (to avoid re-calling API for same text)
+    this.summaryCache = new Map();
+    this.maxCacheSize = 50; // Cache up to 50 summaries
+
     // Callbacks
-    this.onStartCallback = null;
+    this.onPreparingCallback = null; // Called when starting to prepare summary
+    this.onStartCallback = null;     // Called when audio actually starts playing
     this.onEndCallback = null;
     this.onErrorCallback = null;
 
@@ -115,15 +120,28 @@ export class TextToSpeechManager {
     // Get AI summary for speech (if enabled)
     let speechText = text;
     if (this.config.TTS_USE_AI_SUMMARY) {
-      try {
-        speechText = await this.getSpeechSummary(text);
-      } catch (error) {
-        errorLogger.log('SpeechSummary', error);
-        // If summary fails, don't speak (user requested no fallback)
-        if (this.onErrorCallback) {
-          this.onErrorCallback('Failed to generate speech summary');
+      // Check cache first
+      if (this.summaryCache.has(text)) {
+        speechText = this.summaryCache.get(text);
+      } else {
+        // Notify UI that we're preparing summary
+        if (this.onPreparingCallback) {
+          this.onPreparingCallback();
         }
-        return;
+
+        // Generate new summary
+        try {
+          speechText = await this.getSpeechSummary(text);
+          // Cache the summary
+          this.cacheSummary(text, speechText);
+        } catch (error) {
+          errorLogger.log('SpeechSummary', error);
+          // If summary fails, don't speak (user requested no fallback)
+          if (this.onErrorCallback) {
+            this.onErrorCallback('Failed to generate speech summary');
+          }
+          return;
+        }
       }
     }
 
@@ -326,6 +344,18 @@ export class TextToSpeechManager {
   }
 
   /**
+   * Cache a summary with LRU eviction
+   */
+  cacheSummary(text, summary) {
+    // If cache is full, remove oldest entry (LRU)
+    if (this.summaryCache.size >= this.maxCacheSize) {
+      const firstKey = this.summaryCache.keys().next().value;
+      this.summaryCache.delete(firstKey);
+    }
+    this.summaryCache.set(text, summary);
+  }
+
+  /**
    * Get AI-generated summary optimized for text-to-speech
    * Sends the full text to AI for intelligent summarization
    */
@@ -504,6 +534,13 @@ ${text}`
   }
 
   /**
+   * Set callback for when preparing summary (before speech starts)
+   */
+  onPreparing(callback) {
+    this.onPreparingCallback = callback;
+  }
+
+  /**
    * Set callback for speech start
    */
   onStart(callback) {
@@ -571,6 +608,12 @@ ${text}`
       this.currentAudioUrl = null;
     }
 
+    // Clear summary cache
+    if (this.summaryCache) {
+      this.summaryCache.clear();
+    }
+
+    this.onPreparingCallback = null;
     this.onStartCallback = null;
     this.onEndCallback = null;
     this.onErrorCallback = null;

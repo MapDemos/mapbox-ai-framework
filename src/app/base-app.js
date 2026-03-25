@@ -63,7 +63,8 @@ export class BaseApp {
 
     // Text-to-speech
     this.textToSpeechManager = null;
-    this.currentSpeakingMessageId = null;
+    this.currentPreparingMessageId = null; // Message being prepared for TTS
+    this.currentSpeakingMessageId = null;   // Message currently speaking
 
     // Rate limiting (Token Bucket Algorithm)
     this.lastRequestTime = 0;
@@ -1181,19 +1182,32 @@ export class BaseApp {
       this.textToSpeechManager = new TextToSpeechManager(this.config, this.i18n, lambdaUrl);
 
       // Set up callbacks
+      this.textToSpeechManager.onPreparing(() => {
+        // When starting to prepare summary, update icons to show loading
+        this.currentPreparingMessageId = this.currentSpeakingMessageId;
+        this.updateMessageSpeakerIcons();
+      });
+
       this.textToSpeechManager.onStart(() => {
+        // When speech actually starts, clear preparing state
+        this.currentPreparingMessageId = null;
         this.updateAutoSpeakButtonState();
+        this.updateMessageSpeakerIcons();
       });
 
       this.textToSpeechManager.onEnd(() => {
+        this.currentPreparingMessageId = null;
         this.currentSpeakingMessageId = null;
         this.updateAutoSpeakButtonState();
+        this.updateMessageSpeakerIcons();
       });
 
       this.textToSpeechManager.onError((error) => {
         errorLogger.log('TextToSpeechError', error);
+        this.currentPreparingMessageId = null;
         this.currentSpeakingMessageId = null;
         this.updateAutoSpeakButtonState();
+        this.updateMessageSpeakerIcons();
       });
 
       // Update button state
@@ -1291,12 +1305,17 @@ export class BaseApp {
     const speakerIcons = document.querySelectorAll('.message-speaker-icon');
     speakerIcons.forEach(icon => {
       const messageId = icon.dataset.messageId;
-      if (messageId === this.currentSpeakingMessageId) {
+      if (messageId === this.currentPreparingMessageId) {
+        icon.textContent = '⏳'; // Loading icon when preparing summary
+        icon.classList.add('preparing');
+        icon.classList.remove('speaking');
+      } else if (messageId === this.currentSpeakingMessageId) {
         icon.textContent = '⏸️'; // Pause icon when speaking
         icon.classList.add('speaking');
+        icon.classList.remove('preparing');
       } else {
         icon.textContent = '🔊'; // Speaker icon
-        icon.classList.remove('speaking');
+        icon.classList.remove('speaking', 'preparing');
       }
     });
   }
