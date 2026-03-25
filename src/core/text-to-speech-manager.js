@@ -344,7 +344,6 @@ export class TextToSpeechManager {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          provider: 'claude', // Use Claude for summarization
           model: 'claude-sonnet-4-6',
           max_tokens: 500,
           temperature: 0.3, // Lower temperature for consistent summaries
