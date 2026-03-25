@@ -574,9 +574,16 @@ export class BaseApp {
       // Check if TTS will be auto-speaking
       const willAutoSpeak = this.textToSpeechManager && this.textToSpeechManager.isAutoSpeakEnabled();
 
+      console.log('[DEBUG] processUserMessage finally block:', {
+        willAutoSpeak,
+        hasTextToSpeechManager: !!this.textToSpeechManager,
+        isAutoSpeakEnabled: this.textToSpeechManager?.isAutoSpeakEnabled()
+      });
+
       // Only stop thinking and hide displays if TTS won't be speaking
       // (If TTS will speak, thinking continues until speech starts - see onStart callback)
       if (!willAutoSpeak) {
+        console.log('[DEBUG] Stopping thinking and hiding overlay (TTS will not auto-speak)');
         if (this.thinkingSimulator) {
           const thinkingDisplay = document.getElementById('thinkingDisplay');
           if (thinkingDisplay) {
@@ -585,6 +592,8 @@ export class BaseApp {
           this.thinkingSimulator.stopThinking();
         }
         this.hideThinkingOverlay();
+      } else {
+        console.log('[DEBUG] Keeping thinking running (TTS will auto-speak)');
       }
 
       this.isProcessing = false;
