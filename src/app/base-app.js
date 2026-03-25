@@ -571,18 +571,19 @@ export class BaseApp {
         );
       }
     } finally {
-      // Always hide thinking display and stop thinking simulator
-      if (this.thinkingSimulator) {
-        const thinkingDisplay = document.getElementById('thinkingDisplay');
-        if (thinkingDisplay) {
-          thinkingDisplay.style.display = 'none';
-        }
-        this.thinkingSimulator.stopThinking();
-      }
-
-      // Only hide overlay if TTS won't be auto-speaking (it will hide when speech starts)
+      // Check if TTS will be auto-speaking
       const willAutoSpeak = this.textToSpeechManager && this.textToSpeechManager.isAutoSpeakEnabled();
+
+      // Only stop thinking and hide displays if TTS won't be speaking
+      // (If TTS will speak, thinking continues until speech starts - see onStart callback)
       if (!willAutoSpeak) {
+        if (this.thinkingSimulator) {
+          const thinkingDisplay = document.getElementById('thinkingDisplay');
+          if (thinkingDisplay) {
+            thinkingDisplay.style.display = 'none';
+          }
+          this.thinkingSimulator.stopThinking();
+        }
         this.hideThinkingOverlay();
       }
 
