@@ -188,9 +188,18 @@ export class TextToSpeechManager {
       const currentLang = this.i18n.getCurrentLanguage();
       const languageCode = currentLang === 'ja' ? 'ja-JP' : 'en-US';
 
-      // Select voice name based on config or use best default
-      const voiceName = this.config.TTS_GOOGLE_VOICE_NAME ||
-                       (currentLang === 'ja' ? 'ja-JP-Neural2-B' : 'en-US-Neural2-F');
+      // Select voice name based on current language
+      // Only use configured voice if it matches the current language
+      let voiceName;
+      const configuredVoice = this.config.TTS_GOOGLE_VOICE_NAME;
+
+      if (configuredVoice && configuredVoice.startsWith(languageCode)) {
+        // Use configured voice if it matches current language
+        voiceName = configuredVoice;
+      } else {
+        // Auto-select appropriate voice for current language
+        voiceName = currentLang === 'ja' ? 'ja-JP-Neural2-B' : 'en-US-Neural2-F';
+      }
 
       // Prepare request
       const requestBody = {
