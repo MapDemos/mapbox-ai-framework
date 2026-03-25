@@ -230,7 +230,7 @@ export class TextToSpeechManager {
   async speakWithGoogleCloud(text, options = {}, originalText = null) {
     try {
       const currentLang = this.i18n.getCurrentLanguage();
-      const languageCode = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+      const languageCode = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
       // Select voice name based on current language
       // Only use configured voice if it matches the current language
@@ -242,7 +242,7 @@ export class TextToSpeechManager {
         voiceName = configuredVoice;
       } else {
         // Auto-select appropriate voice for current language
-        voiceName = currentLang === 'ja' ? 'ja-JP-Neural2-B' : 'en-US-Neural2-F';
+        voiceName = currentLang === 'ja' ? 'ja-JP-Neural2-B' : currentLang === 'ko' ? 'ko-KR-Neural2-A' : 'en-US-Neural2-F';
       }
 
       // Prepare request
