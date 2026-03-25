@@ -328,6 +328,20 @@ export class TextToSpeechManager {
     cleaned = cleaned.replace(/`(.*?)`/g, '$1');       // Code
     cleaned = cleaned.replace(/\[(.*?)\]\(.*?\)/g, '$1'); // Links
 
+    // Remove all emojis first (including common UI emojis like 📍🕐📞💰🍴)
+    // This covers ALL emoji ranges comprehensively
+    cleaned = cleaned.replace(/[\u{1F000}-\u{1F9FF}]/gu, ''); // All emoji blocks
+    cleaned = cleaned.replace(/[\u{2600}-\u{27BF}]/gu, '');   // Misc symbols & Dingbats
+    cleaned = cleaned.replace(/[\u{2300}-\u{23FF}]/gu, '');   // Misc Technical
+    cleaned = cleaned.replace(/[\u{2B00}-\u{2BFF}]/gu, '');   // Misc Symbols and Arrows
+    cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}]/gu, '');   // Variation Selectors
+
+    // Remove entire lines with location/time/phone prefixes (after emoji removal)
+    // These lines typically start with emoji then contain address/time/phone
+    cleaned = cleaned.replace(/^[\s]*[📍🏠🗺️].*$/gm, ''); // Location lines
+    cleaned = cleaned.replace(/^[\s]*[🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛⏰⌚].*$/gm, ''); // Time lines
+    cleaned = cleaned.replace(/^[\s]*[📞☎️📱].*$/gm, ''); // Phone lines
+
     // Remove parenthetical content (Japanese translations, supplemental info)
     cleaned = cleaned.replace(/\([^)]*\)/g, '');
 
@@ -335,24 +349,30 @@ export class TextToSpeechManager {
     cleaned = cleaned.replace(/[⭐✨🌟]+\d*/g, ''); // Stars with optional numbers
     cleaned = cleaned.replace(/^\d+\.\s*/gm, '');   // Leading numbers like "1. ", "2. "
 
+    // Remove horizontal rules
+    cleaned = cleaned.replace(/^[\s]*[-—_]{3,}[\s]*$/gm, ''); // ---, ___
+
     // Remove addresses (entire lines containing address patterns)
     cleaned = cleaned.replace(/Address:.*?(?=\n|$)/gi, '');
     cleaned = cleaned.replace(/.*?[都道府県市区町村].*?(?=\n|$)/g, ''); // Japanese addresses
-    cleaned = cleaned.replace(/.*?-ku\b.*?(?=\n|$)/gi, ''); // Ward names like "Shibuya-ku"
+    cleaned = cleaned.replace(/.*?-ku\b.*?(?=\n|$)/gi, ''); // Ward names like "Naka-ku"
+    cleaned = cleaned.replace(/.*?\d+.*?cho\b.*?(?=\n|$)/gi, ''); // Street names like "Yamashitacho"
 
-    // Remove phone numbers
+    // Remove phone numbers (handle various formats)
     cleaned = cleaned.replace(/Tel:.*?(?=\n|$)/gi, '');
     cleaned = cleaned.replace(/Phone:.*?(?=\n|$)/gi, '');
     cleaned = cleaned.replace(/電話.*?(?=\n|$)/g, '');
-    cleaned = cleaned.replace(/\b\d{2,4}[-.]?\d{4}[-.]?\d{4}\b/g, ''); // Phone patterns
+    cleaned = cleaned.replace(/\b\d{2,5}[-.]?\d{3,4}[-.]?\d{4}\b/g, ''); // Phone patterns (e.g., 045-681-1841)
 
-    // Remove opening hours / time ranges
-    cleaned = cleaned.replace(/\d{1,2}:\d{2}\s*[-~]\s*\d{1,2}:\d{2}/g, ''); // 11:00-23:00
+    // Remove opening hours / time ranges (handle en-dash, em-dash, hyphen, tilde)
+    cleaned = cleaned.replace(/\d{1,2}:\d{2}\s*[–—\-~]\s*\d{1,2}:\d{2}/g, ''); // Handle multiple dash types
+    cleaned = cleaned.replace(/\(last order.*?\)/gi, ''); // (last order 21:00)
     cleaned = cleaned.replace(/営業時間.*?(?=\n|$)/g, ''); // Japanese hours
     cleaned = cleaned.replace(/Hours:.*?(?=\n|$)/gi, '');
 
     // Remove prices
-    cleaned = cleaned.replace(/¥[\d,]+(?:\s*[-~]\s*¥?[\d,]+)?/g, ''); // ¥980 or ¥1,800-3,000
+    cleaned = cleaned.replace(/¥[\d,]+(?:\s*[–—\-~]\s*¥?[\d,]+)?/g, ''); // Handle multiple dash types
+    cleaned = cleaned.replace(/\$[\d,]+(?:\s*[–—\-~]\s*\$?[\d,]+)?/g, ''); // Dollar prices
     cleaned = cleaned.replace(/価格情報なし/g, ''); // "No price info"
     cleaned = cleaned.replace(/Price.*?(?=\n|$)/gi, '');
 
@@ -367,20 +387,12 @@ export class TextToSpeechManager {
     cleaned = cleaned.replace(/Phone not listed/gi, '');
     cleaned = cleaned.replace(/Price not listed/gi, '');
 
-    // Remove emojis (they don't speak well)
-    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
-    cleaned = cleaned.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Misc Symbols
-    cleaned = cleaned.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport
-    cleaned = cleaned.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, ''); // Flags
-    cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');   // Misc symbols
-    cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');   // Dingbats
-
     // Remove multiple spaces/newlines
     cleaned = cleaned.replace(/\s+/g, ' ');
 
     // Remove extra punctuation artifacts
-    cleaned = cleaned.replace(/\s*[-,]\s*$/gm, ''); // Trailing dashes/commas
-    cleaned = cleaned.replace(/\s+[-,]\s+/g, ' '); // Isolated dashes/commas
+    cleaned = cleaned.replace(/\s*[–—\-,]\s*$/gm, ''); // Trailing dashes/commas (all dash types)
+    cleaned = cleaned.replace(/\s+[–—\-,]\s+/g, ' '); // Isolated dashes/commas
 
     // Trim
     cleaned = cleaned.trim();
