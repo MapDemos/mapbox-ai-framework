@@ -23,9 +23,14 @@ export const CONFIG = {
   // ... other config
 
   // Speech Recognition (optional - enabled by default)
-  SPEECH_RECOGNITION_ENABLED: true,  // Set to false to disable
-  SPEECH_AUTO_SEND: true,            // Auto-send message after transcription
-  SPEECH_USE_MEDIA_RECORDER: false,  // Force MediaRecorder mode (for testing)
+  SPEECH_RECOGNITION_ENABLED: true,     // Set to false to disable
+  SPEECH_AUTO_SEND: true,               // Auto-send message after transcription
+  SPEECH_USE_MEDIA_RECORDER: false,     // Force MediaRecorder mode (for testing)
+
+  // Silence Detection (optional - for MediaRecorder mode)
+  SPEECH_SILENCE_THRESHOLD: 0.01,       // Volume threshold (0.0-1.0, default: 0.01)
+  SPEECH_SILENCE_DURATION: 2000,        // Silence duration in ms (default: 2000ms)
+  SPEECH_MIN_RECORDING_TIME: 500,       // Minimum recording time in ms (default: 500ms)
 };
 ```
 
@@ -135,11 +140,13 @@ Optional auto-send
 #### MediaRecorder Mode:
 ```
 User clicks mic → MediaRecorder starts →
-Audio chunks collected → User clicks stop →
+Audio chunks collected → Silence detected (auto-stop after 2s) →
 Audio sent to Lambda → Lambda forwards to Google Speech API →
 Transcript returned → Text appears in input →
 Optional auto-send
 ```
+
+**Note**: MediaRecorder mode now includes automatic silence detection using the Web Audio API. Recording stops automatically after 2 seconds of silence (configurable).
 
 ## Configuration Options
 
@@ -148,6 +155,9 @@ Optional auto-send
 | `SPEECH_RECOGNITION_ENABLED` | boolean | `true` | Enable/disable speech recognition |
 | `SPEECH_AUTO_SEND` | boolean | `true` | Auto-send message after transcription |
 | `SPEECH_USE_MEDIA_RECORDER` | boolean | `false` | Force MediaRecorder mode (for testing) |
+| `SPEECH_SILENCE_THRESHOLD` | number | `0.01` | Volume threshold for silence detection (0.0-1.0) |
+| `SPEECH_SILENCE_DURATION` | number | `2000` | Silence duration in ms before auto-stop |
+| `SPEECH_MIN_RECORDING_TIME` | number | `500` | Minimum recording time in ms |
 | `CLAUDE_API_PROXY` or `LAMBDA_URL` | string | required | Lambda proxy URL for Google Speech API |
 
 ## Platform Support

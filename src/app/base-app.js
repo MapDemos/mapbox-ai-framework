@@ -12,7 +12,7 @@
  * Extend this class and implement domain-specific logic in your app.
  */
 
-import { I18n, ThinkingSimulator, errorLogger, isLocationInBounds, getUserLocation, SpeechRecognitionManager } from '@mapdemos/ai-framework/core';
+import { I18n, ThinkingSimulator, errorLogger, isLocationInBounds, getUserLocation, SpeechRecognitionManager, TextToSpeechManager } from '@mapdemos/ai-framework/core';
 import { MapController } from '@mapdemos/ai-framework/map';
 import { ClaudeClient, GeminiClient } from '@mapdemos/ai-framework/ai';
 
@@ -60,6 +60,10 @@ export class BaseApp {
 
     // Speech recognition
     this.speechRecognitionManager = null;
+
+    // Text-to-speech
+    this.textToSpeechManager = null;
+    this.currentSpeakingMessageId = null;
 
     // Rate limiting (Token Bucket Algorithm)
     this.lastRequestTime = 0;
@@ -155,6 +159,11 @@ export class BaseApp {
       // Initialize speech recognition if enabled
       if (this.config.SPEECH_RECOGNITION_ENABLED !== false) {
         this.initializeSpeechRecognition();
+      }
+
+      // Initialize text-to-speech if enabled
+      if (this.config.TTS_ENABLED !== false) {
+        this.initializeTextToSpeech();
       }
 
       // Hook for subclass post-initialization logic
@@ -372,6 +381,14 @@ export class BaseApp {
     document.getElementById('micBtn')?.addEventListener(
       'click',
       this.eventHandlers.micButton,
+      { signal: this.abortController.signal }
+    );
+
+    // Auto-speak toggle button for text-to-speech
+    this.eventHandlers.ttsToggle = () => this.toggleTextToSpeech();
+    document.getElementById('tts-toggle')?.addEventListener(
+      'click',
+      this.eventHandlers.ttsToggle,
       { signal: this.abortController.signal }
     );
   }
@@ -744,6 +761,56 @@ export class BaseApp {
     }
 
     messageDiv.appendChild(contentDiv);
+
+    // Add speaker icon for assistant messages (if TTS is enabled)
+    if (role === 'assistant' && this.textToSpeechManager && this.textToSpeechManager.isAvailable()) {
+      const speakerIcon = document.createElement('button');
+      speakerIcon.className = 'message-speaker-icon';
+      const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      speakerIcon.dataset.messageId = messageId;
+      speakerIcon.textContent = '🔊';
+      speakerIcon.title = 'Speak this message';
+      speakerIcon.style.cssText = `
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2em;
+        padding: 4px 8px;
+        margin-left: 8px;
+        opacity: 0.6;
+        transition: opacity 0.2s;
+      `;
+
+      // Hover effect
+      speakerIcon.addEventListener('mouseenter', () => {
+        speakerIcon.style.opacity = '1';
+      });
+      speakerIcon.addEventListener('mouseleave', () => {
+        speakerIcon.style.opacity = '0.6';
+      });
+
+      // Click handler
+      speakerIcon.addEventListener('click', () => {
+        if (this.currentSpeakingMessageId === messageId) {
+          // Stop if already speaking this message
+          this.stopSpeaking();
+        } else {
+          // Speak this message
+          this.speakMessage(content, messageId);
+        }
+      });
+
+      messageDiv.appendChild(speakerIcon);
+
+      // Auto-speak if enabled
+      if (this.textToSpeechManager.isAutoSpeakEnabled()) {
+        // Speak after a short delay to allow UI to update
+        setTimeout(() => {
+          this.speakMessage(content, messageId);
+        }, 100);
+      }
+    }
+
     chatMessages.appendChild(messageDiv);
 
     // Scroll to show the new message after the browser has painted the content
@@ -1095,6 +1162,146 @@ export class BaseApp {
   }
 
   /**
+   * Initialize text-to-speech
+   */
+  initializeTextToSpeech() {
+    try {
+      // Check if TTS is supported
+      if (!window.speechSynthesis) {
+        // Hide TTS button if not supported
+        const ttsToggle = document.getElementById('tts-toggle');
+        if (ttsToggle) {
+          ttsToggle.style.display = 'none';
+        }
+        return;
+      }
+
+      // Initialize TTS manager
+      const lambdaUrl = this.config.CLAUDE_API_PROXY || this.config.LAMBDA_URL;
+      this.textToSpeechManager = new TextToSpeechManager(this.config, this.i18n, lambdaUrl);
+
+      // Set up callbacks
+      this.textToSpeechManager.onStart(() => {
+        this.updateAutoSpeakButtonState();
+      });
+
+      this.textToSpeechManager.onEnd(() => {
+        this.currentSpeakingMessageId = null;
+        this.updateAutoSpeakButtonState();
+      });
+
+      this.textToSpeechManager.onError((error) => {
+        errorLogger.log('TextToSpeechError', error);
+        this.currentSpeakingMessageId = null;
+        this.updateAutoSpeakButtonState();
+      });
+
+      // Update button state
+      this.updateAutoSpeakButtonState();
+
+    } catch (error) {
+      errorLogger.log('TextToSpeechInit', error);
+      // Silently fail - TTS is optional
+    }
+  }
+
+  /**
+   * Toggle auto-speak mode
+   */
+  toggleTextToSpeech() {
+    if (!this.textToSpeechManager) {
+      return;
+    }
+
+    const enabled = this.textToSpeechManager.toggleAutoSpeak();
+    this.updateAutoSpeakButtonState();
+
+    // If disabling, stop current speech
+    if (!enabled) {
+      this.textToSpeechManager.stop();
+      this.currentSpeakingMessageId = null;
+    }
+  }
+
+  /**
+   * Speak a message
+   * @param {string} text - Text to speak
+   * @param {string} messageId - Optional message ID for tracking
+   */
+  speakMessage(text, messageId = null) {
+    if (!this.textToSpeechManager || !text) {
+      return;
+    }
+
+    this.currentSpeakingMessageId = messageId;
+    this.textToSpeechManager.speak(text);
+    this.updateAutoSpeakButtonState();
+  }
+
+  /**
+   * Stop speaking
+   */
+  stopSpeaking() {
+    if (this.textToSpeechManager) {
+      this.textToSpeechManager.stop();
+      this.currentSpeakingMessageId = null;
+      this.updateAutoSpeakButtonState();
+    }
+  }
+
+  /**
+   * Update auto-speak button visual state
+   */
+  updateAutoSpeakButtonState() {
+    const ttsToggle = document.getElementById('tts-toggle');
+    const ttsIcon = document.getElementById('tts-icon');
+
+    if (!ttsToggle || !this.textToSpeechManager) {
+      return;
+    }
+
+    const state = this.textToSpeechManager.getSpeakingState();
+
+    // Update button class
+    if (state.autoSpeakEnabled) {
+      ttsToggle.classList.add('active');
+    } else {
+      ttsToggle.classList.remove('active');
+    }
+
+    // Update icon based on speaking state
+    if (ttsIcon) {
+      if (state.isSpeaking) {
+        ttsIcon.textContent = '🔊'; // Speaking
+        ttsToggle.classList.add('speaking');
+      } else {
+        ttsIcon.textContent = state.autoSpeakEnabled ? '🔊' : '🔇';
+        ttsToggle.classList.remove('speaking');
+      }
+    }
+
+    // Update all speaker icons on messages
+    this.updateMessageSpeakerIcons();
+  }
+
+  /**
+   * Update speaker icons on all messages
+   */
+  updateMessageSpeakerIcons() {
+    const speakerIcons = document.querySelectorAll('.message-speaker-icon');
+    speakerIcons.forEach(icon => {
+      const messageId = icon.dataset.messageId;
+      if (messageId === this.currentSpeakingMessageId) {
+        icon.textContent = '⏸️'; // Pause icon when speaking
+        icon.classList.add('speaking');
+      } else {
+        icon.textContent = '🔊'; // Speaker icon
+        icon.classList.remove('speaking');
+      }
+    });
+  }
+
+  /**
    * Remove event listeners
    */
   removeEventListeners() {
@@ -1115,6 +1322,10 @@ export class BaseApp {
 
     if (this.speechRecognitionManager) {
       this.speechRecognitionManager.cleanup();
+    }
+
+    if (this.textToSpeechManager) {
+      this.textToSpeechManager.cleanup();
     }
 
     if (this.mapController) {

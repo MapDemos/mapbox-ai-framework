@@ -19,3 +19,4 @@ export {
   calculateDistance
 } from './geolocation.js';
 export { SpeechRecognitionManager } from './speech-recognition-manager.js';
+export { TextToSpeechManager } from './text-to-speech-manager.js';

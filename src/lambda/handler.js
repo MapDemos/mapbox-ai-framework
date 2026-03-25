@@ -157,6 +157,11 @@ export const handler = async (event) => {
       return await handleGoogleSpeech(requestBody);
     }
 
+    // Handle Google Cloud Text-to-Speech requests
+    if (provider === 'google-tts') {
+      return await handleGoogleTTS(requestBody);
+    }
+
     // Check if streaming is requested
     if (requestBody.stream === true) {
       return await handleStreamingRequest(provider, requestBody);
@@ -400,6 +405,75 @@ async function handleGoogleSpeech(requestBody) {
 
   if (!response.ok) {
     console.error('[Google Speech] API error:', response.status, data);
+    return {
+      statusCode: response.status,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: data })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  };
+}
+
+/**
+ * Handle Google Cloud Text-to-Speech API requests
+ */
+async function handleGoogleTTS(requestBody) {
+  const apiKey = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_TTS_API_KEY or GOOGLE_API_KEY not configured');
+  }
+
+  const { text, languageCode, voiceName, speakingRate, pitch, volumeGainDb } = requestBody;
+
+  if (!text) {
+    return {
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Missing text in request' })
+    };
+  }
+
+  // Prepare Google Cloud TTS API request
+  const ttsRequest = {
+    input: {
+      text: text
+    },
+    voice: {
+      languageCode: languageCode || 'en-US',
+      name: voiceName || undefined, // Use default if not specified
+      ssmlGender: 'NEUTRAL' // or MALE/FEMALE
+    },
+    audioConfig: {
+      audioEncoding: 'MP3',
+      speakingRate: speakingRate || 1.0,
+      pitch: pitch || 0.0,
+      volumeGainDb: volumeGainDb || 0.0
+    }
+  };
+
+  const apiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(ttsRequest)
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('[Google TTS] API error:', response.status, data);
     return {
       statusCode: response.status,
       headers: {

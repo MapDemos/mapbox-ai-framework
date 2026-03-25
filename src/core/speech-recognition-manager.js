@@ -29,6 +29,16 @@ export class SpeechRecognitionManager {
     this.recognition = null;
     this.useWebSpeechAPI = false;
 
+    // Silence detection (for MediaRecorder mode)
+    this.audioContext = null;
+    this.analyser = null;
+    this.silenceDetectionInterval = null;
+    this.lastSoundTime = null;
+    this.SILENCE_THRESHOLD = config.SPEECH_SILENCE_THRESHOLD || 0.01; // Volume threshold
+    this.SILENCE_DURATION = config.SPEECH_SILENCE_DURATION || 2000; // 2 seconds of silence
+    this.MIN_RECORDING_TIME = config.SPEECH_MIN_RECORDING_TIME || 500; // Minimum 0.5s recording
+    this.recordingStartTime = null;
+
     // Callbacks
     this.onTranscriptCallback = null;
     this.onErrorCallback = null;
@@ -180,6 +190,10 @@ export class SpeechRecognitionManager {
 
       this.mediaRecorder.start();
       this.isRecording = true;
+      this.recordingStartTime = Date.now();
+
+      // Initialize silence detection
+      this.initializeSilenceDetection(this.stream);
 
       if (this.onStartCallback) {
         this.onStartCallback();
@@ -228,6 +242,9 @@ export class SpeechRecognitionManager {
     }
 
     try {
+      // Stop silence detection
+      this.stopSilenceDetection();
+
       if (this.useWebSpeechAPI && this.recognition) {
         this.recognition.stop();
       } else if (this.mediaRecorder) {
@@ -239,6 +256,95 @@ export class SpeechRecognitionManager {
         this.onErrorCallback('Failed to stop recording');
       }
     }
+  }
+
+  /**
+   * Initialize silence detection for MediaRecorder mode
+   */
+  initializeSilenceDetection(stream) {
+    try {
+      // Create audio context for analysis
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.analyser = this.audioContext.createAnalyser();
+
+      // Configure analyser
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.8;
+
+      // Connect stream to analyser
+      const source = this.audioContext.createMediaStreamSource(stream);
+      source.connect(this.analyser);
+
+      // Start monitoring audio levels
+      this.lastSoundTime = Date.now();
+      this.startSilenceMonitoring();
+    } catch (error) {
+      errorLogger.log('SilenceDetection', error);
+      // Continue without silence detection if it fails
+    }
+  }
+
+  /**
+   * Start monitoring audio levels for silence detection
+   */
+  startSilenceMonitoring() {
+    const bufferLength = this.analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    this.silenceDetectionInterval = setInterval(() => {
+      if (!this.isRecording) {
+        this.stopSilenceDetection();
+        return;
+      }
+
+      // Get current audio level
+      this.analyser.getByteTimeDomainData(dataArray);
+
+      // Calculate RMS (Root Mean Square) for volume level
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const normalized = (dataArray[i] - 128) / 128;
+        sum += normalized * normalized;
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+
+      // Check if sound is detected
+      if (rms > this.SILENCE_THRESHOLD) {
+        this.lastSoundTime = Date.now();
+      }
+
+      // Check if silence duration exceeded
+      const silenceDuration = Date.now() - this.lastSoundTime;
+      const recordingDuration = Date.now() - this.recordingStartTime;
+
+      // Auto-stop if:
+      // 1. Minimum recording time has passed
+      // 2. Silence duration threshold exceeded
+      if (recordingDuration > this.MIN_RECORDING_TIME &&
+          silenceDuration > this.SILENCE_DURATION) {
+        this.stopRecording();
+      }
+    }, 100); // Check every 100ms
+  }
+
+  /**
+   * Stop silence detection and clean up audio context
+   */
+  stopSilenceDetection() {
+    if (this.silenceDetectionInterval) {
+      clearInterval(this.silenceDetectionInterval);
+      this.silenceDetectionInterval = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close().catch(err => {
+        errorLogger.log('AudioContextClose', err);
+      });
+      this.audioContext = null;
+    }
+
+    this.analyser = null;
+    this.lastSoundTime = null;
   }
 
   /**

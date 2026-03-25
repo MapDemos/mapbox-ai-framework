@@ -12,7 +12,8 @@ Build AI-powered map applications in minutes. Combines Mapbox GL JS with Claude/
 - 🔒 **Production Ready**: XSS protection, input sanitization, error handling, token management
 - 📦 **Configurable**: Extensive configuration options with sensible defaults
 - 🌍 **I18n Support**: Built-in internationalization with language switching
-- 🎤 **Speech Recognition**: Voice input with Web Speech API and Google Cloud Speech-to-Text (optimized for LG webOS TVs)
+- 🎤 **Speech Recognition**: Voice input with automatic silence detection, Web Speech API and Google Cloud Speech-to-Text (optimized for LG webOS TVs)
+- 🔊 **Text-to-Speech**: AI response playback with hybrid TTS (Web Speech API or Google Cloud WaveNet/Neural2), auto-speak mode, and per-message controls
 
 ## Installation
 
@@ -311,6 +312,7 @@ Built-in voice input with automatic platform detection:
 - Firefox - MediaRecorder + Google Cloud Speech-to-Text
 
 **Features:**
+- Automatic silence detection (hands-free operation)
 - Automatic language detection from i18n settings
 - Visual recording indicators
 - Graceful fallback between recognition methods
@@ -331,7 +333,42 @@ GOOGLE_SPEECH_API_KEY=your_api_key
 
 **See:** [Speech Recognition Documentation](./docs/speech-recognition.md)
 
-### 5. AI Clients
+### 5. Text-to-Speech
+
+Hybrid TTS with two quality levels:
+
+**Two Modes:**
+1. **Web Speech API** (default) - Browser-native, free, instant
+2. **Google Cloud TTS** (premium) - WaveNet/Neural2 voices, very natural ($16/1M chars)
+
+**Features:**
+- Auto-speak mode (automatically speaks all AI responses)
+- Per-message speaker icons for manual control
+- Multi-language voice support (English, Japanese, 40+ languages)
+- Visual feedback and playback controls
+- Choose between free browser voices or premium Google voices
+
+**Setup:**
+```javascript
+// 1. Enable in config (Web Speech API - free)
+TTS_ENABLED: true,
+TTS_AUTO_SPEAK: false,  // Toggle on/off via UI
+
+// 2. OR enable Google Cloud TTS (premium quality)
+TTS_USE_GOOGLE_CLOUD: true,
+TTS_GOOGLE_VOICE_NAME: 'ja-JP-Neural2-B',  // Natural Japanese voice
+
+// 3. Add toggle button to HTML
+<button id="tts-toggle"><span id="tts-icon">🔇</span></button>
+
+// 4. Speaker icons automatically added to messages
+```
+
+**Platform Support:** Chrome, Safari, Edge, Firefox, iOS, Android, LG webOS TVs
+
+**See:** [Text-to-Speech Documentation](./docs/text-to-speech.md)
+
+### 6. AI Clients
 
 Pre-configured Claude and Gemini clients with:
 - Token tracking with auto-pruning at threshold
