@@ -132,7 +132,7 @@ export class SpeechRecognitionManager {
 
         // Update language before starting
         const currentLang = this.i18n.getCurrentLanguage();
-        this.recognition.lang = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+        this.recognition.lang = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
         try {
           this.recognition.start();
@@ -421,7 +421,7 @@ export class SpeechRecognitionManager {
   async transcribeAudio(base64Audio) {
     try {
       const currentLang = this.i18n.getCurrentLanguage();
-      const languageCode = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+      const languageCode = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
       const response = await fetch(this.lambdaUrl, {
         method: 'POST',
