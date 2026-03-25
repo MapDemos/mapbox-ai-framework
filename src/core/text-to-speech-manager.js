@@ -87,7 +87,7 @@ export class TextToSpeechManager {
     }
 
     const currentLang = this.i18n.getCurrentLanguage();
-    const langCode = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+    const langCode = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
     // Find best matching voice
     // Priority: 1. Exact lang match + local, 2. Exact lang match, 3. Partial match, 4. Any
@@ -182,7 +182,7 @@ export class TextToSpeechManager {
 
     // Set language
     const currentLang = this.i18n.getCurrentLanguage();
-    this.currentUtterance.lang = currentLang === 'ja' ? 'ja-JP' : 'en-US';
+    this.currentUtterance.lang = currentLang === 'ja' ? 'ja-JP' : currentLang === 'ko' ? 'ko-KR' : 'en-US';
 
     // Set options
     this.currentUtterance.rate = options.rate || this.config.TTS_RATE || 1.0;

@@ -347,13 +347,31 @@ export class BaseApp {
       { signal: this.abortController.signal }
     );
 
-    // Language toggle
-    this.eventHandlers.langToggle = () => this.toggleLanguage();
-    document.getElementById('lang-toggle')?.addEventListener(
-      'click',
-      this.eventHandlers.langToggle,
-      { signal: this.abortController.signal }
-    );
+    // Language dropdown
+    // Check if using new dropdown or old toggle
+    const langDropdown = document.getElementById('lang-dropdown');
+    const langToggle = document.getElementById('lang-toggle');
+
+    if (langDropdown) {
+      // New dropdown interface
+      this.eventHandlers.langChange = () => this.handleLanguageChange();
+      langDropdown.addEventListener(
+        'change',
+        this.eventHandlers.langChange,
+        { signal: this.abortController.signal }
+      );
+
+      // Initialize dropdown with current language
+      this.initializeLanguageDropdown();
+    } else if (langToggle) {
+      // Legacy toggle button
+      this.eventHandlers.langToggle = () => this.toggleLanguage();
+      langToggle.addEventListener(
+        'click',
+        this.eventHandlers.langToggle,
+        { signal: this.abortController.signal }
+      );
+    }
 
     // Clear chat
     this.eventHandlers.clearChat = asyncErrorWrapper(
@@ -573,16 +591,94 @@ export class BaseApp {
   }
 
   /**
-   * Toggle language
+   * Toggle language (legacy)
+   * Cycles through all available languages if 3+ languages are available,
+   * otherwise toggles between 2 languages
    */
   toggleLanguage() {
-    this.i18n.toggleLanguage();
+    const availableLanguages = this.i18n.getAvailableLanguages();
+
+    // Use cycle for 3+ languages, toggle for 2 languages
+    if (availableLanguages.length > 2) {
+      this.i18n.cycleLanguage();
+    } else {
+      this.i18n.toggleLanguage();
+    }
+
     this.updateUI();
 
     // Update map language if available
     const currentLang = this.i18n.getCurrentLanguage();
     if (this.mapController) {
       this.mapController.setMapLanguage(currentLang);
+    }
+
+    // Rebuild Claude system prompt with new language if available
+    if (this.claudeClient && this.claudeClient.buildSystemPrompt) {
+      // Use current mapView from ClaudeClient, or null if not set
+      const mapView = this.claudeClient.mapView || null;
+      this.claudeClient.systemPrompt = this.claudeClient.buildSystemPrompt(
+        this.claudeClient.userLocation,
+        mapView
+      );
+    }
+
+    // Update welcome message in chat (first system message)
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+      const firstMessage = chatMessages.querySelector('.message.system-message');
+      if (firstMessage) {
+        const contentDiv = firstMessage.querySelector('.message-content');
+        if (contentDiv) {
+          contentDiv.innerHTML = this.formatResponse(this.i18n.t('system.welcome'));
+        }
+      }
+    }
+  }
+
+  /**
+   * Initialize language dropdown with available languages
+   * Populates dropdown with options and sets current language
+   */
+  initializeLanguageDropdown() {
+    const dropdown = document.getElementById('lang-dropdown');
+    if (!dropdown) return;
+
+    // Clear existing options
+    dropdown.innerHTML = '';
+
+    // Get language options from i18n
+    const languages = this.i18n.getLanguageOptions();
+    const currentLang = this.i18n.getCurrentLanguage();
+
+    // Add options to dropdown
+    languages.forEach(({ code, label }) => {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = label;
+      if (code === currentLang) {
+        option.selected = true;
+      }
+      dropdown.appendChild(option);
+    });
+  }
+
+  /**
+   * Handle language change from dropdown
+   * Switches to the selected language and updates UI
+   */
+  handleLanguageChange() {
+    const dropdown = document.getElementById('lang-dropdown');
+    if (!dropdown) return;
+
+    const newLang = dropdown.value;
+    this.i18n.setLanguage(newLang);
+
+    this.updateUI();
+
+    // Update map language if available
+    if (this.mapController) {
+      this.mapController.setMapLanguage(newLang);
     }
 
     // Rebuild Claude system prompt with new language if available

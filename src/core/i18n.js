@@ -79,7 +79,7 @@ export class I18n {
   /**
    * Toggle between two languages
    * Useful for apps with 2 languages (e.g., English/Japanese)
-   * For 3+ languages, use setLanguage() instead
+   * For 3+ languages, use cycleLanguage() instead
    *
    * @param {string} lang1 - First language (default: 'en')
    * @param {string} lang2 - Second language (default: first available lang != lang1)
@@ -93,6 +93,25 @@ export class I18n {
     }
 
     this.currentLang = this.currentLang === lang1 ? lang2 : lang1;
+    return this.currentLang;
+  }
+
+  /**
+   * Cycle through all available languages
+   * Advances to the next language in the array, looping back to the first
+   * Useful for apps with 3+ languages (e.g., English/Japanese/Korean)
+   *
+   * @returns {string} New current language
+   */
+  cycleLanguage() {
+    const availableLangs = Object.keys(this.translations);
+    if (availableLangs.length === 0) {
+      return this.currentLang;
+    }
+
+    const currentIndex = availableLangs.indexOf(this.currentLang);
+    const nextIndex = (currentIndex + 1) % availableLangs.length;
+    this.currentLang = availableLangs[nextIndex];
     return this.currentLang;
   }
 
@@ -151,5 +170,55 @@ export class I18n {
       ...this.translations[lang],
       ...translations
     };
+  }
+
+  /**
+   * Get native language name for a language code
+   * Returns the native name of the language (e.g., '日本語' for 'ja')
+   *
+   * @param {string} lang - Language code
+   * @returns {string} Native language name
+   */
+  getLanguageName(lang) {
+    const languageNames = {
+      'en': 'English',
+      'ja': '日本語',
+      'ko': '한국어',
+      'es': 'Español',
+      'fr': 'Français',
+      'de': 'Deutsch',
+      'it': 'Italiano',
+      'pt': 'Português',
+      'ru': 'Русский',
+      'zh': '中文',
+      'ar': 'العربية',
+      'hi': 'हिन्दी',
+      'th': 'ไทย',
+      'vi': 'Tiếng Việt'
+    };
+
+    return languageNames[lang] || lang.toUpperCase();
+  }
+
+  /**
+   * Get all available languages with their native names
+   * Returns array of {code, label} objects for building language selectors
+   *
+   * @returns {Array<{code: string, label: string}>} Array of language options
+   *
+   * Example:
+   * ```javascript
+   * [
+   *   { code: 'en', label: 'English' },
+   *   { code: 'ja', label: '日本語' },
+   *   { code: 'ko', label: '한국어' }
+   * ]
+   * ```
+   */
+  getLanguageOptions() {
+    return this.getAvailableLanguages().map(lang => ({
+      code: lang,
+      label: this.getLanguageName(lang)
+    }));
   }
 }
