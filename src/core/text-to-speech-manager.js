@@ -407,6 +407,8 @@ export class TextToSpeechManager {
       const currentLang = this.i18n.getCurrentLanguage();
       const languageInstruction = currentLang === 'ja'
         ? 'Respond in Japanese.'
+        : currentLang === 'ko'
+        ? 'Respond in Korean.'
         : 'Respond in English.';
 
       const response = await fetch(this.lambdaUrl, {
