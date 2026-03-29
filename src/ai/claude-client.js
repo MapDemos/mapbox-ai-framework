@@ -82,7 +82,10 @@ export class ClaudeClient {
     // Build location context
     let locationContext = '';
     if (userLocation) {
-      const coords = `${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`;
+      // Use labeled raw coordinates (Mapbox best practice)
+      // Negative longitude = West, Positive = East
+      // Positive latitude = North, Negative = South
+      const coords = `Latitude: ${userLocation.latitude.toFixed(6)}, Longitude: ${userLocation.longitude.toFixed(6)}`;
       const placeName = userLocation.placeName || userLocation.name;
       if (placeName) {
         locationContext = `\n\nUSER LOCATION:\n- Current location: ${placeName}\n- Coordinates: ${coords}\n- When user asks "around me", "near me", "nearby", use this location as reference`;
@@ -95,7 +98,10 @@ export class ClaudeClient {
     let mapViewContext = '';
     if (mapView) {
       const { center, zoom, placeName, name } = mapView;
-      const coords = `${center.lat.toFixed(4)}°N, ${center.lng.toFixed(4)}°E`;
+      // Use labeled raw coordinates (Mapbox best practice)
+      // Negative longitude = West, Positive = East
+      // Positive latitude = North, Negative = South
+      const coords = `Latitude: ${center.lat.toFixed(4)}, Longitude: ${center.lng.toFixed(4)}`;
       if (placeName || name) {
         const location = placeName || name;
         mapViewContext = `Map view: ${location} (${coords}, zoom ${zoom.toFixed(1)})\n\n`;
@@ -133,20 +139,27 @@ GUIDELINES:
     // Collect from all data sources
     this.dataSources.forEach(dataSource => {
       if (dataSource && typeof dataSource.getToolsForClaude === 'function') {
-        tools.push(...dataSource.getToolsForClaude());
+        const dsTools = dataSource.getToolsForClaude();
+        console.log('[ClaudeClient] Data source tools:', dsTools.map(t => t.name));
+        tools.push(...dsTools);
       }
     });
 
     // Add map tools
     if (this.mapController && typeof this.mapController.getToolsForClaude === 'function') {
-      tools.push(...this.mapController.getToolsForClaude());
+      const mapTools = this.mapController.getToolsForClaude();
+      console.log('[ClaudeClient] Map tools:', mapTools.map(t => t.name));
+      tools.push(...mapTools);
     }
 
     // Add app tools (search history)
     if (this.app && typeof this.app.getSearchHistoryTools === 'function') {
-      tools.push(...this.app.getSearchHistoryTools());
+      const appTools = this.app.getSearchHistoryTools();
+      console.log('[ClaudeClient] App tools:', appTools.map(t => t.name));
+      tools.push(...appTools);
     }
 
+    console.log('[ClaudeClient] Total tools available:', tools.length, tools.map(t => t.name));
     return tools;
   }
 

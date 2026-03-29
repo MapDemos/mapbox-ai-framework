@@ -110,9 +110,12 @@ export class BaseApp {
       // Initialize data sources (provided by subclass)
       const dataSources = await this.getDataSources();
 
+      // Get custom map options from subclass (if any)
+      const mapOptions = this.getMapOptions ? this.getMapOptions() : {};
+
       // Initialize Map Controller
       this.mapController = new MapController(this.config, this);
-      await this.mapController.initialize('map');
+      await this.mapController.initialize('map', mapOptions);
 
       // Set initial map language
       this.mapController.setMapLanguage(this.i18n.getCurrentLanguage());

@@ -19,6 +19,7 @@ export class MapController {
     this.starMarkers = []; // Track star markers for recommended POIs
     this.languageControl = null; // Mapbox GL Language plugin
     this.geolocateControl = null; // Mapbox built-in geolocation control
+    this.currentLanguage = null; // Track current language to avoid unnecessary reloads
     this.eventHandlers = []; // Track all event listeners for cleanup
     this.domEventHandlers = []; // Track DOM event listeners
   }
@@ -26,31 +27,47 @@ export class MapController {
   /**
    * Initialize the map
    * @param {string} containerId - ID of the container element
+   * @param {object} mapOptions - Optional Mapbox GL JS map options to override defaults
+   * @param {boolean} mapOptions.showControls - Show navigation/fullscreen/geolocate controls (default: true)
    */
-  async initialize(containerId) {
+  async initialize(containerId, mapOptions = {}) {
+    console.log('[MapController] initialize() called', { containerId, mapOptions });
     try {
       // Set Mapbox access token
       mapboxgl.accessToken = this.config.MAPBOX_ACCESS_TOKEN;
 
-      // Create map
-      this.map = new mapboxgl.Map({
+      // Extract control visibility option (defaults to true for backward compatibility)
+      const { showControls = true, ...glMapOptions } = mapOptions;
+
+      // Default map options (for backward compatibility with Japan demos)
+      const defaultOptions = {
         container: containerId,
         //style: this.config.MAP_STYLE, // Commented out to use default 3D style
         center: this.config.DEFAULT_MAP_CENTER,
         zoom: this.config.DEFAULT_MAP_ZOOM,
         attributionControl: true,
         projection: 'mercator',
-        // Restrict map bounds to Japan (southwest: [lng, lat], northeast: [lng, lat])
+        // Restrict map bounds to Japan by default (southwest: [lng, lat], northeast: [lng, lat])
         maxBounds: [[122, 24], [154, 46]]
+      };
+
+      // Merge provided options with defaults (provided options take precedence)
+      // Create map
+      this.map = new mapboxgl.Map({
+        ...defaultOptions,
+        ...glMapOptions
       });
 
-      // Add navigation controls
-      this.map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      // Conditionally add map controls based on showControls option
+      if (showControls) {
+        // Add navigation controls (zoom, compass)
+        this.map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-      // Add fullscreen control
-      this.map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+        // Add fullscreen control
+        this.map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+      }
 
-      // Add Geolocate control with custom styling for puck
+      // Initialize geolocate control (always created, conditionally added)
       this.geolocateControl = new mapboxgl.GeolocateControl({
         positionOptions: {
           enableHighAccuracy: true
@@ -59,11 +76,32 @@ export class MapController {
         showUserHeading: false,
         showAccuracyCircle: true
       });
-      this.map.addControl(this.geolocateControl, 'top-right');
+
+      if (showControls) {
+        this.map.addControl(this.geolocateControl, 'top-right');
+      }
 
       // Wait for map to load
       await new Promise((resolve) => {
-        this.map.on('load', resolve);
+        this.map.on('load', () => {
+          console.log('[MapController] Map loaded event fired');
+          resolve();
+        });
+      });
+
+      // Add debug logging for map movement
+      this.map.on('movestart', () => {
+        console.log('[MapController] movestart');
+      });
+      this.map.on('move', () => {
+        const center = this.map.getCenter();
+        const zoom = this.map.getZoom();
+        console.log('[MapController] move', { center: [center.lng, center.lat], zoom });
+      });
+      this.map.on('moveend', () => {
+        const center = this.map.getCenter();
+        const zoom = this.map.getZoom();
+        console.log('[MapController] moveend', { center: [center.lng, center.lat], zoom });
       });
 
       // Initialize Map Tools library (loaded from CDN)
@@ -2200,20 +2238,6 @@ export class MapController {
     this.markers.forEach(marker => marker.remove());
     this.markers = [];
 
-    // Clear pill-style POI markers
-    if (this.layerMarkers) {
-      this.layerMarkers.forEach((markers, layerName) => {
-        markers.forEach(markerObj => {
-          if (markerObj.marker) {
-            markerObj.marker.remove();
-          } else {
-            markerObj.remove();
-          }
-        });
-      });
-      this.layerMarkers.clear();
-    }
-
     // Clear star markers
     this.clearStarMarkers();
 
@@ -2235,28 +2259,33 @@ export class MapController {
     }
 
     try {
-      // Remove DOM markers if they exist (for pill-style markers)
-      if (this.layerMarkers && this.layerMarkers.has(layerName)) {
-        this.layerMarkers.get(layerName).forEach(markerObj => {
-          if (markerObj.marker) {
-            markerObj.marker.remove();
-          } else {
-            markerObj.remove(); // Backward compatibility
-          }
-        });
-        this.layerMarkers.delete(layerName);
+      // Remove new-style symbol/circle layers
+      const circleLayerId = `${layerName}-circles`;
+      const iconLayerId = `${layerName}-icons`;
+      const rankingLayerId = `${layerName}-rankings`;
+
+      // Remove layers (must remove in reverse order of creation)
+      [rankingLayerId, iconLayerId, circleLayerId].forEach(id => {
+        if (this.map.getLayer(id)) {
+          this.map.removeLayer(id);
+        }
+      });
+
+      // Remove source
+      if (this.map.getSource(layerName)) {
+        this.map.removeSource(layerName);
       }
 
-      // Also try to remove old-style symbol layers (for backward compatibility)
-      const layerId = `${layerName}-layer`;
-      const sourceId = `${layerName}-source`;
+      // Backward compatibility: remove old-style layers
+      const oldLayerId = `${layerName}-layer`;
+      const oldSourceId = `${layerName}-source`;
 
-      if (this.map.getLayer(layerId)) {
-        this.map.removeLayer(layerId);
+      if (this.map.getLayer(oldLayerId)) {
+        this.map.removeLayer(oldLayerId);
       }
 
-      if (this.map.getSource(sourceId)) {
-        this.map.removeSource(sourceId);
+      if (this.map.getSource(oldSourceId)) {
+        this.map.removeSource(oldSourceId);
       }
     } catch (error) {
       console.error(`Failed to remove layer ${layerName}:`, error);
@@ -2289,6 +2318,7 @@ export class MapController {
    * @param {Object} userLocation - User location object {latitude, longitude}
    */
   recenterToUser(userLocation) {
+    console.log('[MapController] recenterToUser() called', userLocation);
     if (!this.map) return;
 
     if (userLocation) {
@@ -2958,9 +2988,8 @@ export class MapController {
   }
 
   /**
-   * Add icon layer to map from GeoJSON using custom pill-style DOM markers
-   * REVERT NOTE: To revert to symbol layers, restore the original code that uses
-   * this.map.addLayer with type: 'symbol'
+   * Add icon layer to map using Mapbox GL JS symbol and circle layers
+   * GPU-accelerated rendering for better performance
    */
   async addIconLayer(geojson, layerName = 'icon-layer') {
     if (!this.map || !geojson) {
@@ -2968,24 +2997,9 @@ export class MapController {
       return;
     }
 
-    // Store markers by layer name for cleanup
-    if (!this.layerMarkers) {
-      this.layerMarkers = new Map();
-    }
-
-    // Remove existing markers for this layer
-    if (this.layerMarkers.has(layerName)) {
-      this.layerMarkers.get(layerName).forEach(marker => marker.remove());
-      this.layerMarkers.delete(layerName);
-    }
-
-    const markers = [];
-
-    // Create pill-style DOM marker for each feature
-    geojson.features.forEach(feature => {
-      const { coordinates } = feature.geometry;
+    // Enhance GeoJSON features with icon and color data
+    const enhancedFeatures = geojson.features.map(feature => {
       const props = feature.properties;
-      const [lng, lat] = coordinates;
 
       // Get emoji icon and color based on data source
       let icon, bgColor;
@@ -3010,76 +3024,110 @@ export class MapController {
 
       // Format ranking (A-D or empty)
       const ranking = props.rank || props.Rank || '';
-      const rankClass = ranking ? `rank-${ranking.toString().toLowerCase()}` : '';
 
-      // Create wrapper for Mapbox positioning (0x0 div)
-      const wrapper = document.createElement('div');
-      wrapper.style.width = '0px';
-      wrapper.style.height = '0px';
-      wrapper.style.position = 'relative';
-      wrapper.style.zIndex = '100'; // Lower than star markers (1000) to ensure stars appear on top
+      return {
+        ...feature,
+        properties: {
+          ...props,
+          icon: icon,
+          bgColor: bgColor,
+          ranking: ranking
+        }
+      };
+    });
 
-      // Create pill marker element
-      const markerEl = document.createElement('div');
-      markerEl.className = 'poi-pill-marker';
+    const enhancedGeoJSON = {
+      type: 'FeatureCollection',
+      features: enhancedFeatures
+    };
 
-      // Set gray background for SearchBox POIs (entire pill, not just icon)
-      if (props.source === 'searchbox') {
-        markerEl.style.cssText += 'background: #E0E0E0 !important;';
+    // Remove existing layers and source
+    const circleLayerId = `${layerName}-circles`;
+    const iconLayerId = `${layerName}-icons`;
+    const rankingLayerId = `${layerName}-rankings`;
+
+    [rankingLayerId, iconLayerId, circleLayerId].forEach(id => {
+      if (this.map.getLayer(id)) {
+        this.map.removeLayer(id);
       }
+    });
 
-      // Position to center the pill on the POI location
-      markerEl.style.position = 'absolute';
-      markerEl.style.left = '-35px'; // Adjusted for larger size
-      markerEl.style.top = '-16px';  // Adjusted for larger size
+    if (this.map.getSource(layerName)) {
+      this.map.removeSource(layerName);
+    }
 
-      // Add icon with colored background
-      const iconEl = document.createElement('div');
-      iconEl.className = 'poi-pill-icon';
-      iconEl.style.cssText = `background: ${bgColor} !important;`;
-      iconEl.textContent = icon;
-      markerEl.appendChild(iconEl);
+    // Add source
+    this.map.addSource(layerName, {
+      type: 'geojson',
+      data: enhancedGeoJSON
+    });
 
-      // Add ranking if available
-      if (ranking) {
-        const rankingEl = document.createElement('div');
-        rankingEl.className = `poi-pill-ranking ${rankClass}`;
-        rankingEl.textContent = ranking.toString().toUpperCase();
-        markerEl.appendChild(rankingEl);
+    // Add circle layer for background
+    this.map.addLayer({
+      id: circleLayerId,
+      type: 'circle',
+      source: layerName,
+      paint: {
+        'circle-radius': 18,
+        'circle-color': ['get', 'bgColor'],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff'
       }
+    });
 
-      // Add marker element to wrapper
-      wrapper.appendChild(markerEl);
+    // Add symbol layer for emoji icons
+    this.map.addLayer({
+      id: iconLayerId,
+      type: 'symbol',
+      source: layerName,
+      layout: {
+        'text-field': ['get', 'icon'],
+        'text-size': 20,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+        'text-offset': [0, 0]
+      },
+      paint: {
+        'text-color': '#ffffff'
+      }
+    });
 
-      // Create Mapbox GL JS marker with custom element (no popup, using modal instead)
-      const marker = new mapboxgl.Marker({
-        element: wrapper,
-        anchor: 'center'
-      })
-        .setLngLat([lng, lat]);
+    // Add ranking text layer (only shows if ranking exists)
+    this.map.addLayer({
+      id: rankingLayerId,
+      type: 'symbol',
+      source: layerName,
+      filter: ['!=', ['get', 'ranking'], ''],
+      layout: {
+        'text-field': ['get', 'ranking'],
+        'text-size': 12,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+        'text-offset': [1.5, 0],
+        'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold']
+      },
+      paint: {
+        'text-color': '#333333'
+      }
+    });
 
-      // Add click handler to show POI modal
-      markerEl.addEventListener('click', () => {
-        if (this.poiClickCallback) {
-          this.poiClickCallback(props);
+    // Add click handlers for all three layers
+    [circleLayerId, iconLayerId, rankingLayerId].forEach(id => {
+      this.map.on('click', id, (e) => {
+        if (this.poiClickCallback && e.features && e.features.length > 0) {
+          this.poiClickCallback(e.features[0].properties);
         }
       });
 
-      // Add to map
-      marker.addTo(this.map);
+      // Change cursor on hover
+      this.map.on('mouseenter', id, () => {
+        this.map.getCanvas().style.cursor = 'pointer';
+      });
 
-      // Store marker with metadata for waypoint matching
-      markers.push({
-        marker: marker,
-        markerEl: markerEl,
-        coordinates: [lng, lat],
-        name: props.name || props.Name || '',
-        props: props  // Store full props for star marker transfer
+      this.map.on('mouseleave', id, () => {
+        this.map.getCanvas().style.cursor = '';
       });
     });
-
-    // Store markers for this layer
-    this.layerMarkers.set(layerName, markers);
   }
 
   /**
@@ -3425,12 +3473,29 @@ export class MapController {
    * @param {string} language - Language code ('en' or 'ja')
    */
   setMapLanguage(language) {
+    console.log('[MapController] setMapLanguage() called', language);
     if (!this.map || !this.map.setLanguage) {
       console.warn('[Map] Language control not available');
       return;
     }
 
+    // Skip if language is 'en' (default) and map just loaded
+    // This prevents unnecessary style reload on initial load
+    if (!this.currentLanguage && language === 'en') {
+      console.log('[MapController] Skipping setLanguage() - map already defaults to English');
+      this.currentLanguage = language;
+      return;
+    }
+
+    // Skip if language hasn't changed
+    if (this.currentLanguage === language) {
+      console.log('[MapController] Skipping setLanguage() - language already set to', language);
+      return;
+    }
+
+    console.log('[MapController] Calling map.setLanguage() - this may reload the map style');
     this.map.setLanguage(language);
+    this.currentLanguage = language;
   }
 
   /**
