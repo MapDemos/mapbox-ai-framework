@@ -885,43 +885,44 @@ export class BaseApp {
 
     // Add speaker icon for assistant messages (if TTS is enabled)
     if (role === 'assistant' && this.textToSpeechManager && this.textToSpeechManager.isAvailable()) {
-      const speakerIcon = document.createElement('button');
-      speakerIcon.className = 'message-speaker-icon';
+      // Hidden: Speaker icon buttons removed for cleaner UI
+      // const speakerIcon = document.createElement('button');
+      // speakerIcon.className = 'message-speaker-icon';
       const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      speakerIcon.dataset.messageId = messageId;
-      speakerIcon.textContent = '🔊';
-      speakerIcon.title = 'Speak this message';
-      speakerIcon.style.cssText = `
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1.2em;
-        padding: 4px 8px;
-        margin-left: 8px;
-        opacity: 0.6;
-        transition: opacity 0.2s;
-      `;
+      // speakerIcon.dataset.messageId = messageId;
+      // speakerIcon.textContent = '🔊';
+      // speakerIcon.title = 'Speak this message';
+      // speakerIcon.style.cssText = `
+      //   background: none;
+      //   border: none;
+      //   cursor: pointer;
+      //   font-size: 1.2em;
+      //   padding: 4px 8px;
+      //   margin-left: 8px;
+      //   opacity: 0.6;
+      //   transition: opacity 0.2s;
+      // `;
 
       // Hover effect
-      speakerIcon.addEventListener('mouseenter', () => {
-        speakerIcon.style.opacity = '1';
-      });
-      speakerIcon.addEventListener('mouseleave', () => {
-        speakerIcon.style.opacity = '0.6';
-      });
+      // speakerIcon.addEventListener('mouseenter', () => {
+      //   speakerIcon.style.opacity = '1';
+      // });
+      // speakerIcon.addEventListener('mouseleave', () => {
+      //   speakerIcon.style.opacity = '0.6';
+      // });
 
       // Click handler
-      speakerIcon.addEventListener('click', () => {
-        if (this.currentSpeakingMessageId === messageId) {
-          // Stop if already speaking this message
-          this.stopSpeaking();
-        } else {
-          // Speak this message
-          this.speakMessage(content, messageId);
-        }
-      });
+      // speakerIcon.addEventListener('click', () => {
+      //   if (this.currentSpeakingMessageId === messageId) {
+      //     // Stop if already speaking this message
+      //     this.stopSpeaking();
+      //   } else {
+      //     // Speak this message
+      //     this.speakMessage(content, messageId);
+      //   }
+      // });
 
-      messageDiv.appendChild(speakerIcon);
+      // messageDiv.appendChild(speakerIcon);
 
       // Auto-speak if enabled
       if (this.textToSpeechManager.isAutoSpeakEnabled()) {

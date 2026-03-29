@@ -1793,6 +1793,9 @@ export class MapController {
   async executeGetDirections(args) {
     const { waypoints, profile, alternatives, steps, language } = args;
 
+    // DEBUG: Log waypoints received by directions tool
+    console.log('[DEBUG] executeGetDirections - Received waypoints:', JSON.stringify(waypoints, null, 2));
+
     const options = {
       profile: profile || 'driving',
       alternatives: alternatives || false,
@@ -1801,6 +1804,12 @@ export class MapController {
     };
 
     try {
+      // Clear all previous routes before adding new one
+      this.clearAllRoutes();
+
+      // DEBUG: Log waypoints being sent to API
+      console.log('[DEBUG] executeGetDirections - Sending waypoints to Directions API:', JSON.stringify(waypoints, null, 2));
+
       // @ts-ignore - getDirections is async and returns Promise, await is necessary
       const result = await getDirections(waypoints, this.config.MAPBOX_ACCESS_TOKEN, options);
 
@@ -2119,6 +2128,12 @@ export class MapController {
           await this.executeAddPointsAsMarkers({ points });
         }
 
+        // DEBUG: Log search results with coordinates
+        console.log('[DEBUG] search_location - Returning results to Claude:');
+        result.results.forEach((poi, index) => {
+          console.log(`[DEBUG]   Result ${index + 1}: "${poi.name}" at coordinates [${poi.coordinates[0]}, ${poi.coordinates[1]}]`);
+        });
+
         // Return summary with search_id (results NOT auto-displayed)
         return {
           content: [{
@@ -2388,15 +2403,6 @@ export class MapController {
     const layerName = options.layerName || `route-${Date.now()}`;
     const profile = options.profile || 'driving';
 
-    // Color based on profile
-    const colors = {
-      driving: '#4264FB',
-      'driving-traffic': '#FF6B6B',
-      walking: '#9C27B0',
-      cycling: '#95E77D'
-    };
-    const lineColor = colors[profile] || colors.driving;
-
     try {
       // Add source
       if (!this.map.getSource(layerName)) {
@@ -2409,7 +2415,26 @@ export class MapController {
         });
       }
 
-      // Add line layer
+      // Add white outline/casing layer first (underneath)
+      const casingLayerId = `${layerName}-casing`;
+      if (!this.map.getLayer(casingLayerId)) {
+        this.map.addLayer({
+          id: casingLayerId,
+          type: 'line',
+          source: layerName,
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#FFFFFF',
+            'line-width': 12,
+            'line-opacity': 1
+          }
+        });
+      }
+
+      // Add thick light blue main route line on top of casing
       if (!this.map.getLayer(layerName)) {
         this.map.addLayer({
           id: layerName,
@@ -2420,14 +2445,14 @@ export class MapController {
             'line-cap': 'round'
           },
           paint: {
-            'line-color': lineColor,
-            'line-width': 6,
-            'line-opacity': 0.75
+            'line-color': '#4FC3F7',  // Light blue
+            'line-width': 8,
+            'line-opacity': 1
           }
         });
       }
 
-      // Add arrow symbols layer to show direction
+      // Add white triangle arrows to show direction
       const arrowLayerId = `${layerName}-arrows`;
       if (!this.map.getLayer(arrowLayerId)) {
         this.map.addLayer({
@@ -2436,16 +2461,15 @@ export class MapController {
           source: layerName,
           layout: {
             'symbol-placement': 'line',
-            'text-field': '>',
-            'text-size': 24,
+            'text-field': '▶',  // Right-pointing triangle
+            'text-size': 16,
             'text-rotation-alignment': 'map',
             'text-keep-upright': false,
-            'symbol-spacing': 100
+            'symbol-spacing': 80  // Show arrows more frequently
           },
           paint: {
-            'text-color': lineColor,
-            'text-halo-color': '#FFFFFF',
-            'text-halo-width': 2
+            'text-color': '#FFFFFF',
+            'text-opacity': 0.9
           }
         });
       }
@@ -2458,7 +2482,7 @@ export class MapController {
         }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
 
         this.map.fitBounds(bounds, {
-          padding: 50,
+          padding: 150,  // Increased padding to ensure start/end points are visible
           duration: 1000
         });
       }
@@ -3307,6 +3331,16 @@ export class MapController {
         if (this.map.getLayer(route.layerName)) {
           this.map.setLayoutProperty(route.layerName, 'visibility', 'none');
         }
+        // Hide casing layer
+        const casingLayerId = `${route.layerName}-casing`;
+        if (this.map.getLayer(casingLayerId)) {
+          this.map.setLayoutProperty(casingLayerId, 'visibility', 'none');
+        }
+        // Hide arrows layer
+        const arrowsLayerId = `${route.layerName}-arrows`;
+        if (this.map.getLayer(arrowsLayerId)) {
+          this.map.setLayoutProperty(arrowsLayerId, 'visibility', 'none');
+        }
         // Hide markers
         route.startMarker.remove();
         route.endMarker.remove();
@@ -3336,6 +3370,16 @@ export class MapController {
         // Show the route layer
         if (this.map.getLayer(route.layerName)) {
           this.map.setLayoutProperty(route.layerName, 'visibility', 'visible');
+        }
+        // Show casing layer
+        const casingLayerId = `${route.layerName}-casing`;
+        if (this.map.getLayer(casingLayerId)) {
+          this.map.setLayoutProperty(casingLayerId, 'visibility', 'visible');
+        }
+        // Show arrows layer
+        const arrowsLayerId = `${route.layerName}-arrows`;
+        if (this.map.getLayer(arrowsLayerId)) {
+          this.map.setLayoutProperty(arrowsLayerId, 'visibility', 'visible');
         }
         // Show markers
         route.startMarker.addTo(this.map);
@@ -3393,6 +3437,11 @@ export class MapController {
         // Remove main layer
         if (this.map.getLayer(route.layerName)) {
           this.map.removeLayer(route.layerName);
+        }
+        // Remove casing layer (if it exists)
+        const casingLayerId = `${route.layerName}-casing`;
+        if (this.map.getLayer(casingLayerId)) {
+          this.map.removeLayer(casingLayerId);
         }
         // Remove source (after all layers are removed)
         if (this.map.getSource(route.layerName)) {
